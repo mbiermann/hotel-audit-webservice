@@ -2,21 +2,27 @@ const express = require('express')
 const router = express.Router()
 const storage = require('../service/storage')
 const logger = require('../utils/logger')
-const {trackEvent} = require('../service/tracking')
-const {middleware: authMiddleware} = require('../utils/auth-middleware')
+const { trackEvent } = require('../service/tracking')
+const { middleware: authMiddleware } = require('../utils/auth-middleware')
 const blocker = require('../utils/blocked-middleware')
+const { Logging } = require('@google-cloud/logging')
+
+let projectId = process.env.GC_PROJECT_ID
+const logging = new Logging({ projectId });
+const logName = process.env.GC_FETCHLOG
+const auditFetchLog = logging.log(logName);
 
 router.get('/report', authMiddleware, async (req, resp) => {
-  
+
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
         if (isNaN(page) || page === 0) page = 1
         let size = Number(req.query.size)
         if (isNaN(size)) size = 10
         if (size > 500) size = 500
-        let offset = (page > 1 ? (page-1)*size :  0)
+        let offset = (page > 1 ? (page - 1) * size : 0)
         storage.getAuditsReport(offset, size).then((res) => {
-            resp.status(200).json({results: res.result, page_number: page, page_size: size, total_pages:Math.ceil(res.total/size)});
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
         })
     } else {
         resp.sendStatus(403)
@@ -25,7 +31,8 @@ router.get('/report', authMiddleware, async (req, resp) => {
 })
 
 router.get('/', async (req, resp) => {
-  
+
+    let startDate = new Date()
     /*let isTrustedClient = false
     if (!!req.query && ('secretKey' in req.query)) {
         const configuredSecretKey = process.env.SECRET_KEY || 'big-secret';
@@ -42,7 +49,7 @@ router.get('/', async (req, resp) => {
         }
     }
     */
-    
+
     let hkeys = []
     if (!!req.query && !!req.query.hkeys) {
         hkeys = req.query.hkeys.split(',')
@@ -55,7 +62,7 @@ router.get('/', async (req, resp) => {
         }*/
     }
 
-    storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query)).then((res) => {
+    storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query)).then(async (res) => {
         let data = {}
         const defaultKeys = ['auditor', 'audit_date', 'program_name', 'link']
         for (let hkey of Object.keys(res)) {
@@ -75,11 +82,19 @@ router.get('/', async (req, resp) => {
             }
         }
         trackEvent('Audit Web Service', 'Audits Request Success', req.query.hkeys)
-        logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 200})
+        logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 200 })
+        let endDate = new Date()
+        let dur = (endDate.getTime() - startDate.getTime()) / hkeys.length
+        const entry = auditFetchLog.entry(
+            { resource: { type: 'global' } },
+            { endDate: endDate, numHkeys: hkeys.length, fetchDuration: dur }
+        )
+        await auditFetchLog.write(entry)
         resp.status(200).json(data)
     }).catch((err) => {
+        console.log(err)
         trackEvent('Audit Web Service', 'Audits Request Failure', req.query.hkeys)
-        logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 500, "error": "Server Error"})
+        logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
         resp.status(500).json({ error: 'Server Error' })
     })  
     

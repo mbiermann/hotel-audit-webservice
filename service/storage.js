@@ -54,16 +54,23 @@ const getCachedAuditRecordsForHkeys = (hkeys) => {
         let data = {}
         let proms = []
         for (let hkey of hkeys) {
-            let prom = scanAndGetValues(`${hkey}:*`, '0')
-            prom.then((res) => {
-                if (res.length === 0) {
-                    //logger.logEvent(logger.EventAuditCacheMiss, {"hkey": hkey})
-                    return
-                }
-                data[hkey] = res
-                //logger.logEvent(logger.EventAuditCacheHit, {"hkey": hkey})
-            })
-            proms.push(prom)
+            proms.push(new Promise((resolve1) => {
+                cache.smembers(hkey, (err, keys) => {
+                    let _proms = []
+                    if (keys.length > 0) {
+                        for (let key of keys) {
+                            _proms.push(new Promise((resolve2) => {
+                                cache.get(key, (err, val) => {
+                                    if (!(hkey in data)) data[hkey] = []
+                                    data[hkey].push(JSON.parse(val))
+                                    resolve2()
+                                })
+                            }))
+                        }
+                    }
+                    Promise.all(_proms).then(resolve1)
+                })
+            }))
         }
         Promise.all(proms).then(() => {
             resolve(data)
@@ -114,8 +121,10 @@ let evalAuditRecord = (i) => {
 } 
 
 const cacheAuditRecordForHkey = (hkey, elem) => {
-    let key = `${hkey}:${crypto.createHash('md5').update(JSON.stringify(elem)).digest('hex')}`
+    let key = crypto.createHash('md5').update(JSON.stringify(elem)).digest('hex')
     cache.set(key, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+    cache.sadd(hkey, key)
+    cache.expire(hkey, process.env.REDIS_TTL)
 }
 
 const getAuditRecordsForHkeys = (hkeys, bypass_cache = false, bypass_redirect_mapping = false) => {
