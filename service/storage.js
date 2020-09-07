@@ -19,36 +19,6 @@ const mandatoryChecksByService = {
     }
 }
 
-const scanAndGetValues = async (pattern, cursor, list) => {
-
-    return new Promise((resolve, reject) => {
-        if (!list) list = []
-        cache.scan(cursor, 'MATCH', pattern, 'COUNT', '100', function(err, reply){
-            if(err) return reject(err)
-            cursor = reply[0];
-            var keys = reply[1];
-            let proms = []
-            for (let key of keys) {                   
-                proms.push(new Promise((_resolve, _reject) => {
-                    cache.get(key, function(err, reply){
-                        if (err) return _reject(err)
-                        list.push(JSON.parse(reply))
-                        _resolve()
-                    })   
-                }))
-            }
-            Promise.all(proms).then( () => {
-                if (cursor === '0') {
-                    return resolve(list);
-                }
-                scanAndGetValues(pattern, cursor, list).then(resolve).catch(reject)
-            })
-        })
-    }) 
-  
-
-}
-
 const getCachedAuditRecordsForHkeys = (hkeys) => {
     return new Promise((resolve, reject) => {
         let data = {}
@@ -279,10 +249,10 @@ exports.getHotelStatusByHkeys = async (hkeys, flat = false, bypass_cache = false
     }
 }
 
-exports.getAuditsReport = (offset, size) => {
+exports.getAuditsReport = (where, offset, size) => {
     return new Promise((resolve, reject) => {
-        db.query(`SELECT * FROM audits_full ORDER BY id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
-            db.query("SELECT COUNT(*) as `count` FROM audits_full", [], (snd) => {
+        db.query(`SELECT * FROM audits_full ${where} ORDER BY id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM audits_full ${where}`, [], (snd) => {
                 let proms = []
                 for (let item of fst) {
                     const i = evalAuditRecord(item)
