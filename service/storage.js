@@ -79,7 +79,7 @@ let evalAuditRecord = (i) => {
                 }
             }    
             i.status = (i.missed.length === 0)
-            if (i.status && i.audit_date !== null && i.auditor !== null) {
+            if (i.status && i.audit_date !== null && i.auditor_key !== null) {
                 i.type = "cleansafe_expert_inspection"
             }    
         } else {
@@ -203,7 +203,7 @@ exports.getHotelStatusByHkeys = async (hkeys, flat = false, bypass_cache = false
     proms.push(emailStatsFetch)
 
     let auditRecordsFetch = getAuditRecordsForHkeys(hkeys, bypass_cache, bypass_redirect_mapping).then((res) => {
-        const defaultKeys = ['auditor', 'audit_date', 'program_name', 'link']
+        const defaultKeys = ['auditor_key', 'audit_date', 'program_name', 'link']
         for (let hkey of Object.keys(res)) {
             for (let elem of res[hkey]) {
                 if (!audits[hkey]) audits[hkey] = []

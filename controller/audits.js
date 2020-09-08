@@ -73,7 +73,7 @@ router.get('/', async (req, resp) => {
 
     storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query)).then(async (res) => {
         let data = {}
-        const defaultKeys = ['auditor', 'audit_date', 'program_name', 'link']
+        const defaultKeys = ['auditor_key', 'audit_date', 'program_name', 'link']
         for (let hkey of Object.keys(res)) {
             for (let elem of res[hkey]) {
                 if (!data[hkey]) data[hkey] = []
