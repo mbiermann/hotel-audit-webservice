@@ -133,21 +133,48 @@ const getAuditRecordsForHkeys = (hkeys, bypass_cache = false, bypass_redirect_ma
 exports.getAuditRecordsForHkeys = getAuditRecordsForHkeys
 
 exports.getTouchlessStatusForHkeys = (hkeys) => {
+    return getCachedTouchlessStatusForHKeys(hkeys).then((res) => {
+        const hkeysFromCache = Object.keys(res)
+        let touchlessHkeys = new Set(hkeysFromCache.map(e => Number(e)))
 
-    let filter = `WHERE hkey IN (${hkeys})`
-    let mpp = db.select("mpp", filter)
-    let mpsmart = db.select("mpsmart", filter)
-    let smarthotel = db.select("smarthotels", filter)
+        let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(el) < 0 )
+        let filter = `WHERE hkey IN (${leftHkeys})`
+        let mpp = db.select("mpp", filter)
+        let mpsmart = db.select("mpsmart", filter)
+        let smarthotel = db.select("smarthotels", filter)
 
-    return Promise.all([mpp, mpsmart, smarthotel]).then(res => {
-        let touchlessHkeys = new Set()
-        res.forEach(list => {
-            list.forEach(item => {
-                touchlessHkeys.add(item.hkey)
+        return Promise.all([mpp, mpsmart, smarthotel]).then(res => {
+            res.forEach(list => {
+                list.forEach(item => {
+                    touchlessHkeys.add(item.hkey)
+                    cacheTouchlessStatusForHkey(item.hkey, true)
+                })
             })
+            return Array.from(touchlessHkeys)
         })
-        return Array.from(touchlessHkeys)
     })
+}
+
+const cacheTouchlessStatusForHkey = (hkey, elem) => {
+    cache.set(`${hkey}:touchless`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL)
+}
+
+const getCachedTouchlessStatusForHKeys = (hkeys) => {
+    return new Promise((resolve) => {
+        let data = {}
+        let proms = []
+        for (let hkey of hkeys) {
+            proms.push(new Promise((resolve, reject) => {
+                cache.get(`${hkey}:touchless`, (err, val) => {
+                    if (val !== null) data[hkey] = JSON.parse(val)
+                    resolve()
+                })
+            }))
+        }
+        Promise.all(proms).then(_ => {
+            resolve(data)
+        })
+    })   
 }
 
 exports.getHotelStatusByHkeys = async (hkeys, flat = false, bypass_cache = false, bypass_redirect_mapping = false, bypass_full_email_reporting = false, exclude = []) => {
