@@ -133,25 +133,34 @@ const getAuditRecordsForHkeys = (hkeys, bypass_cache = false, bypass_redirect_ma
 exports.getAuditRecordsForHkeys = getAuditRecordsForHkeys
 
 exports.getTouchlessStatusForHkeys = (hkeys) => {
-    return getCachedTouchlessStatusForHKeys(hkeys).then((res) => {
-        const hkeysFromCache = Object.keys(res)
-        let touchlessHkeys = new Set(hkeysFromCache.map(e => Number(e)))
+    return new Promise(async (resolve, reject) => {
+        try {
+            hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
+            if (hkeys.length === 0) return resolve([])
+    
+            getCachedTouchlessStatusForHKeys(hkeys).then((res) => {
+                const hkeysFromCache = Object.keys(res)
+                let touchlessHkeys = new Set(hkeysFromCache.map(e => Number(e)))
 
-        let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(el) < 0 )
-        let filter = `WHERE hkey IN (${leftHkeys})`
-        let mpp = db.select("mpp", filter)
-        let mpsmart = db.select("mpsmart", filter)
-        let smarthotel = db.select("smarthotels", filter)
+                let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(el) < 0 )
+                let filter = `WHERE hkey IN (${leftHkeys})`
+                let mpp = db.select("mpp", filter)
+                let mpsmart = db.select("mpsmart", filter)
+                let smarthotel = db.select("smarthotels", filter)
 
-        return Promise.all([mpp, mpsmart, smarthotel]).then(res => {
-            res.forEach(list => {
-                list.forEach(item => {
-                    touchlessHkeys.add(item.hkey)
-                    cacheTouchlessStatusForHkey(item.hkey, true)
+                return Promise.all([mpp, mpsmart, smarthotel]).then(res => {
+                    res.forEach(list => {
+                        list.forEach(item => {
+                            touchlessHkeys.add(item.hkey)
+                            cacheTouchlessStatusForHkey(item.hkey, true)
+                        })
+                    })
+                    resolve(Array.from(touchlessHkeys))
                 })
             })
-            return Array.from(touchlessHkeys)
-        })
+        } catch (err) {
+            reject(err)
+        }
     })
 }
 
