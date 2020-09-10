@@ -132,6 +132,24 @@ const getAuditRecordsForHkeys = (hkeys, bypass_cache = false, bypass_redirect_ma
 
 exports.getAuditRecordsForHkeys = getAuditRecordsForHkeys
 
+exports.getTouchlessStatusForHkeys = (hkeys) => {
+
+    let filter = `WHERE hkey IN (${hkeys})`
+    let mpp = db.select("mpp", filter)
+    let mpsmart = db.select("mpsmart", filter)
+    let smarthotel = db.select("smarthotels", filter)
+
+    return Promise.all([mpp, mpsmart, smarthotel]).then(res => {
+        let touchlessHkeys = new Set()
+        res.forEach(list => {
+            list.forEach(item => {
+                touchlessHkeys.add(item.hkey)
+            })
+        })
+        return Array.from(touchlessHkeys)
+    })
+}
+
 exports.getHotelStatusByHkeys = async (hkeys, flat = false, bypass_cache = false, bypass_redirect_mapping = false, bypass_full_email_reporting = false, exclude = []) => {
     let filter = ''
     filter = `WHERE hkey IN (${hkeys})`

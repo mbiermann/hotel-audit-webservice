@@ -42,40 +42,24 @@ router.get('/report', authMiddleware, async (req, resp) => {
 router.get('/', async (req, resp) => {
 
     let startDate = new Date()
-    /*let isTrustedClient = false
-    if (!!req.query && ('secretKey' in req.query)) {
-        const configuredSecretKey = process.env.SECRET_KEY || 'big-secret';
-        switch (req.query.secretKey) {
-            case configuredSecretKey:
-                isTrustedClient = true
-                break
-            default:
-                return blocker.block(req, (ip) => {
-                    trackEvent('Audit Web Service', 'Incorrect secret key on audits/ endpoint', JSON.stringify({key_provided: req.query.secretKey, ip: ip}))
-                    logger.logEvent(logger.EventSecretKeyError, {error: 'Incorrect secret key on audits/ endpoint', key_provided: req.query.secretKey, ip: ip})
-                    resp.status(403).json({error: 'Incorrect authentication.'})
-                })
-        }
-    }
-    */
-
+    
     let hkeys = []
-    if (!!req.query && !!req.query.hkeys) {
-        hkeys = req.query.hkeys.split(',')
-        /*if (hkeys.length > (isTrustedClient ? 200 : 20)) {
-            return blocker.block(req, (ip) => {
-                trackEvent('Audit Web Service', 'Too many hkeys on audits/ endpoint', JSON.stringify({num_hkeys: hkeys.length, ip: ip}))
-                logger.logEvent(logger.EventSecretKeyError, {error: 'Too many hkeys on audits/ endpoint', num_hkeys: hkeys.length, ip: ip})
-                resp.status(403).json({error: 'Too many hkeys.'})
-            })
-        }*/
-    }
+    if (!!req.query && !!req.query.hkeys) hkeys = req.query.hkeys.split(',')
 
-    storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query)).then(async (res) => {
+    let touchless = storage.getTouchlessStatusForHkeys(hkeys)
+    let cleansafe = storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
+    
+    Promise.all([touchless, cleansafe]).then(async (result) => {
+        
+        let _touchless = result[0]
+        let _cleansafe = result[1]
+
         let data = {}
+        let csTouchlessCheckin = new Set()
+        
         const defaultKeys = ['auditor_key', 'audit_date', 'program_name', 'link']
-        for (let hkey of Object.keys(res)) {
-            for (let elem of res[hkey]) {
+        for (let hkey of Object.keys(_cleansafe)) {
+            for (let elem of _cleansafe[hkey]) {
                 if (!data[hkey]) data[hkey] = []
                 let item = {
                     id: elem._id,
@@ -88,8 +72,20 @@ router.get('/', async (req, resp) => {
                     if (elem[key]) item[key] = elem[key]
                 }
                 data[hkey].push(item)
+                if (!!elem.status && elem.checked.split(',').indexOf("13") > -1) csTouchlessCheckin.add(hkey)
             }
         }
+
+        for (let hkey of hkeys) {
+            if (csTouchlessCheckin.has(hkey) || _touchless.indexOf(Number(hkey)) > -1) {
+                if (!(hkey in data)) data[hkey] = []
+                data[hkey].push({
+                    type: 'touchless_stay',
+                    status: true
+                })
+            }
+        }
+
         trackEvent('Audit Web Service', 'Audits Request Success', req.query.hkeys)
         logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 200 })
         let endDate = new Date()
