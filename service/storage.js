@@ -139,10 +139,11 @@ exports.getTouchlessStatusForHkeys = (hkeys) => {
             if (hkeys.length === 0) return resolve([])
     
             getCachedTouchlessStatusForHKeys(hkeys).then((res) => {
-                const hkeysFromCache = Object.keys(res)
-                let touchlessHkeys = new Set(hkeysFromCache.map(e => Number(e)))
+                const hkeysFromCache = Object.keys(res).map(e => Number(e))
+                let touchlessHkeys = new Set(hkeysFromCache)
 
-                let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(el) < 0 )
+                let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
+                if (leftHkeys.length === 0) return resolve(Array.from(touchlessHkeys))
                 let filter = `WHERE hkey IN (${leftHkeys})`
                 let mpp = db.select("mpp", filter)
                 let mpsmart = db.select("mpsmart", filter)
@@ -313,6 +314,17 @@ exports.getAuditsReport = (where, offset, size) => {
                     proms.push(i)
                 }
                 Promise.all(proms).then(res => resolve({result: res, total: snd[0]['count']}))
+            })
+        })
+    })
+}
+
+exports.getAllTouchlessStatus = (where, offset, size) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT * FROM touchless_stay ${where} ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM touchless_stay ${where}`, [], (snd) => {
+                fst.forEach(i => i.status = !!i.date)
+                resolve({result: fst, total: snd[0]['count']})
             })
         })
     })

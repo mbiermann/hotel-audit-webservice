@@ -31,12 +31,40 @@ router.get('/report', authMiddleware, async (req, resp) => {
         }
 
         storage.getAuditsReport(where, offset, size).then((res) => {
-            resp.status(403).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
         })
+            
     } else {
         resp.sendStatus(403)
     }
 
+})
+
+router.get('/report/touchlessstay', authMiddleware, async (req, resp) => {
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+
+        let where = ''
+        if (('since' in req.query)) {
+            if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.since))) {
+                return resp.status(403).send({ message: 'Invalid use of parameter ´since´!' })
+            }
+            where = `WHERE DATE(date) >= '${req.query.since}'`
+        }
+
+    
+        storage.getAllTouchlessStatus(where, offset, size).then((res) => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        })
+                
+    } else {
+        resp.sendStatus(403)
+    }
 })
 
 router.get('/', async (req, resp) => {
