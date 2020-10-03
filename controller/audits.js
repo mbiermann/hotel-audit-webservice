@@ -4,15 +4,17 @@ const storage = require('../service/storage')
 const logger = require('../utils/logger')
 const { trackEvent } = require('../service/tracking')
 const { middleware: authMiddleware } = require('../utils/auth-middleware')
+const {middleware: citrixAccess} = require('../utils/citrix-access')
 const blocker = require('../utils/blocked-middleware')
 const { Logging } = require('@google-cloud/logging')
+const Excel = require('exceljs')
 
 let projectId = process.env.GC_PROJECT_ID
 const logging = new Logging({ projectId });
 const logName = process.env.GC_FETCHLOG
 const auditFetchLog = logging.log(logName);
 
-router.get('/report', authMiddleware, async (req, resp) => {
+router.get('/report', authMiddleware('normal'), async (req, resp) => {
     
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
@@ -40,7 +42,7 @@ router.get('/report', authMiddleware, async (req, resp) => {
 
 })
 
-router.get('/report/touchlessstay', authMiddleware, async (req, resp) => {
+router.get('/report/touchlessstay', authMiddleware('normal'), async (req, resp) => {
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
         if (isNaN(page) || page === 0) page = 1
@@ -65,6 +67,22 @@ router.get('/report/touchlessstay', authMiddleware, async (req, resp) => {
     } else {
         resp.sendStatus(403)
     }
+})
+
+router.get('/report/cleanandsafe_sgs_inspections_completed', citrixAccess, (req, res) => {
+    storage.getCompletedSGSAudits().then(async (data) => {
+        let workbook = new Excel.stream.xlsx.WorkbookWriter()
+        let worksheet = workbook.addWorksheet('SGS Inspections Completed')
+        worksheet.columns = [{header: 'HKey', key: 'hkey'},{header: 'Audit ID', key: 'audit_id'},{header: 'Date', key: 'date'}]
+        data.forEach((e, index) => { worksheet.addRow({...e}).commit() })
+        worksheet.commit()
+        await workbook.commit()
+        let stream = workbook.stream.read()
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        res.setHeader('Content-Disposition', `attachment; filename=cleanandsafe_sgs_inspections_completed.xlsx`)
+        res.setHeader('Content-Length', stream.length)
+        res.send(stream)
+    })
 })
 
 router.get('/', async (req, resp) => {

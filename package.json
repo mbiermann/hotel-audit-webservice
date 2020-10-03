@@ -30,6 +30,7 @@
     "@google-cloud/storage": "^5.1.1",
     "csv-write-stream": "^2.0.0",
     "promise.any": "^2.0.1",
-    "@google-cloud/logging": "^8.0.5"
+    "@google-cloud/logging": "^8.0.5",
+    "exceljs": "^4.1.1"
   }
 }

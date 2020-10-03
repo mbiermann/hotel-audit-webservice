@@ -6,7 +6,7 @@ const CryptoJS = require('crypto-js')
 const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
 const {validate: validateCitrixAccess} = require('../utils/citrix-access')
-const {validate: validateSecretAccess} = require('../utils/auth-middleware')
+const {validate: validateSecretAccess, middleware: authMiddleware} = require('../utils/auth-middleware')
 const storage = require('../service/storage')
 const ejs = require('ejs')
 const any = require('promise.any')
@@ -135,6 +135,25 @@ router.get('/cs_sticker/:type/:code', (req, resp) => {
         trackEvent('Audit Web Service', 'Sticker Request Failure', 'audit_id::'+dec)
         return resp.sendStatus(500)
     })
+})
+
+router.get('/invitations/hotels', authMiddleware('invitations'), (req, resp) => {
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+        storage.getInvitations(offset, size).then(res => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        }).catch(err => {
+            trackEvent('Audit Web Service', 'Get Hotel Invitations Failure')
+            return resp.sendStatus(500)
+        })     
+    } else {
+        resp.sendStatus(403)
+    }
 })
 
 module.exports = router;

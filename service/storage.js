@@ -346,6 +346,14 @@ exports.getSGSAuditById = (id) => {
     })
 }
 
+exports.getCompletedSGSAudits = () => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT hkey, audit_id, date FROM sgs_audits_view WHERE status="Closed"`, [], (res) => {
+            return resolve(res)
+        })
+    })
+}
+
 exports.uploadFile = (filename) => {
     return cloudStorage.uploadFile(filename)
 }
@@ -366,6 +374,16 @@ exports.getClientDataForId = (id) => {
     return new Promise((resolve, reject) => {
         db.query(`SELECT * FROM 2020_rfp A LEFT JOIN rfps B ON A.rfp_id = B.id WHERE B.client_id = ${db.escape(id)} AND rfp_status = 'accepted'`, [], (res) => {
             return resolve(res)
+        })
+    })
+}
+
+exports.getInvitations = (offset, size) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT hkey, code FROM hotels ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM hotels`, [], (snd) => {
+                resolve({result: fst, total: snd[0]['count']})
+            })
         })
     })
 }

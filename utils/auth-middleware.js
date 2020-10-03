@@ -4,9 +4,7 @@ const blocker = require('../utils/blocked-middleware')
 const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
 
-const _configuredSecretKey = process.env.SECRET_KEY || 'big-secret';
-
-const validate = request => {
+const validate = (request, scope = 'normal') => {
     return new Promise((resolve, reject) => {
 
         let secretKey = null
@@ -24,8 +22,10 @@ const validate = request => {
                 error: new UnauthorizedError('Missing secret key'), 
                 providedKey: secretKey
             })
+        
+        let expectedSecretKey = process.env[`SECRET_KEY_${scope.toUpperCase()}`]
     
-        if (_configuredSecretKey !== secretKey) 
+        if (expectedSecretKey !== secretKey) 
             return reject({
                 error: new UnauthorizedError('Provided secret key does not match'), 
                 providedKey: secretKey
@@ -38,13 +38,15 @@ const validate = request => {
 
 module.exports = {
     validate: validate,
-    middleware: (req, res, next) => {
-        validate(req).then(next).catch( reason => {
-            blocker.block(req, (ip) => {
-                trackEvent('Audit Web Service', 'Incorrect secret key', JSON.stringify({key_provided: reason.providedKey, ip: ip}))
-                logger.logEvent(logger.EventSecretKeyError, {error: reason.error.message, key_provided: reason.providedKey, ip: ip})
-                res.status(403).json({error: 'Incorrect authentication.'})
+    middleware: (scope) => {
+        return (req, res, next) => {
+            validate(req, scope).then(next).catch( reason => {
+                blocker.block(req, (ip) => {
+                    trackEvent('Audit Web Service', 'Incorrect secret key', JSON.stringify({key_provided: reason.providedKey, ip: ip}))
+                    logger.logEvent(logger.EventSecretKeyError, {error: reason.error.message, key_provided: reason.providedKey, ip: ip})
+                    res.status(403).json({error: 'Incorrect authentication.'})
+                })
             })
-        })
+        }
     }
 }
