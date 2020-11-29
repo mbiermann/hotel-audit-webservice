@@ -90,11 +90,154 @@ let evalAuditRecord = (i) => {
     })
 } 
 
+let getGreenhouseGasFactors = (i) => {
+
+    return new Promise((resolve, reject) => {
+
+        let refrigeratorFactors = db.select("refrigerator_emission_factors")
+        let fuelFactors = db.select("mobilefuels_emission_factors")
+        let electricityFactors = db.select("electricity_emission_factors")
+
+        Promise.all([refrigeratorFactors, fuelFactors, electricityFactors]).then(res => {
+
+            let refrigerants = {}
+            res[0].forEach(e => {
+                refrigerants[e._id] = e.factor
+            });
+
+            let mobileFuels = {}
+            res[1].forEach(e => {
+                mobileFuels[e._id] = e.factor
+            });
+
+            let electricity = {}
+            res[2].forEach(e => {
+                electricity[e._id] = e.factor
+            });
+
+            resolve({"refrigerants": refrigerants, "mobile_fuels": mobileFuels, "electricity": electricity})
+
+        })
+
+    })   
+
+}
+
+let evalGreenAuditRecord = (i) => {
+    return new Promise((resolve, reject) => {
+
+        getGreenhouseGasFactors(i).then(factors => {
+
+            let total_electricity_kwh = i.total_electricity_kwh || 0
+            let total_gas_kwh = i.total_gas_kwh || 0
+            let total_oil_litres = i.total_oil_litres || 0
+
+            if (i.is_privatespace_available) {
+
+                if (i.privatespace_total_electricity_kwh > 0 || i.privatespace_total_oil_litres > 0 || i.privatespace_total_gas_kwh > 0) {
+                    total_electricity_kwh -= i.privatespace_total_electricity_kwh
+                    total_oil_litres -= i.privatespace_total_oil_litres
+                    total_gas_kwh -= i.privatespace_total_gas_kwh
+                } else if (i.total_privatespace_sqm > 0) {
+                    let privateSpaceShare = i.total_privatespace_sqm / i.total_conditioned_area_sqm
+                    total_electricity_kwh -= total_electricity_kwh * privateSpaceShare
+                    total_oil_litres -= total_oil_litres * privateSpaceShare
+                    total_gas_kwh -= total_gas_kwh * privateSpaceShare
+                }
+
+            }
+
+            if (i.is_laundry_outsourced) {
+
+                if (i.laundry_total_electricity_kwh > 0 || i.laundry_total_oil_litres > 0 || i.laundry_total_gas_kwh > 0) {
+                    total_electricity_kwh += i.laundry_total_electricity_kwh
+                    total_oil_litres += i.laundry_total_oil_litres
+                    total_gas_kwh += i.laundry_total_gas_kwh
+                } else if (i.laundry_metric_tons > 0) {
+                    total_electricity_kwh += 180 * i.laundry_metric_tons
+                    total_oil_litres += 111 * i.laundry_metric_tons
+                    total_gas_kwh += 1560 * i.laundry_metric_tons
+                }
+
+            }
+
+            let totalKgCo2e = 0
+
+            if (i.mobile_fuels) {
+                for (const [key, value] of Object.entries(JSON.parse(i.mobile_fuels)))
+                    totalKgCo2e += factors.mobile_fuels[key] * value
+            }
+
+            if (i.refrigerants) {
+                for (const [key, value] of Object.entries(JSON.parse(i.refrigerants)))
+                    totalKgCo2e += factors.refrigerants[key] * value
+            }
+
+            let kgCo2eElectrictiy = total_electricity_kwh * factors.electricity[i.electricity_emission_location]
+            let kgCo2eOil = total_oil_litres * factors.mobile_fuels.diesel
+            let kgCo2eGas = total_gas_kwh * factors.mobile_fuels.gas
+            totalKgCo2e += (kgCo2eElectrictiy + kgCo2eOil + kgCo2eGas)
+
+            let shareRoomsToMeetingSpaces = i.total_guest_room_corridor_area_sqm / (i.total_guest_room_corridor_area_sqm + i.total_meeting_space_sqm)
+            let kgCo2ePOC = (shareRoomsToMeetingSpaces * totalKgCo2e) / i.total_occupied_rooms
+
+            // Index values based on CHSB2020 M1 countries only LowerQ, Mean, UpperQ
+            const index = ['A','B','C']
+            const thresholds = [21,38,49]
+
+            let greenIndex = 'D'
+            for (let i = 0; i < thresholds.length; i++) {
+                if (kgCo2ePOC <= thresholds[i]) {
+                    greenIndex = index[i]
+                    break
+                }
+            }
+
+            let rec = {}
+            rec.hkey = i.hkey
+            rec.id = i._id
+            rec.created_date = i._createdDate
+            rec.updated_date = i._updatedDate
+            rec.kgCo2ePOC = kgCo2ePOC
+            rec.greenIndex = greenIndex
+            rec.status = false
+            rec.link = i.link ? i.link : process.env.DEFAULT_PROGRAM_LINK
+            rec.program_name = i.program_name ? i.program_name : process.env.DEFAULT_PROGRAM_NAME
+            rec.type = "green_index_self_inspection"
+            rec.status = true
+            resolve(rec)
+        })
+        
+    })
+} 
+
 const cacheAuditRecordForHkey = (hkey, elem) => {
     let key = crypto.createHash('md5').update(JSON.stringify(elem)).digest('hex')
     cache.set(key, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
     cache.sadd(hkey, key)
     cache.expire(hkey, process.env.REDIS_TTL)
+}
+
+const cacheGreenAuditRecordForHkey = (hkey, elem) => {
+    cache.set(`green:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+}
+
+const getCachedGreenAuditRecordsForHkeys = (hkeys) => {
+    return new Promise((resolve, reject) => {
+        let data = {}
+        let proms = []
+        for (let hkey of hkeys) {
+            proms.push(new Promise((resolve1) => {
+                cache.get(`green:${hkey}`, (err, val) => {
+                    if (!!val) data[hkey] = JSON.parse(val)
+                    resolve1()
+                })
+            }))
+        }
+        Promise.all(proms).then(() => {
+            resolve(data)
+        })
+    })   
 }
 
 const getAuditRecordsForHkeys = (hkeys, bypass_cache = false, bypass_redirect_mapping = false) => {
@@ -158,6 +301,55 @@ exports.getTouchlessStatusForHkeys = (hkeys) => {
                     })
                     resolve(Array.from(touchlessHkeys))
                 })
+            })
+        } catch (err) {
+            reject(err)
+        }
+    })
+}
+
+exports.getGreenAuditRecordsForHkeys = (hkeys) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
+            if (hkeys.length === 0) return resolve([])
+
+            let records = await getCachedGreenAuditRecordsForHkeys(hkeys)
+            const hkeysFromCache = Object.keys(records).map(e => Number(e))
+            let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
+            if (leftHkeys.length === 0) return resolve(records)
+    
+            let filter = `WHERE hkey IN (${leftHkeys})`
+            let greenAudits = await db.select("green_audits", filter)
+            let evals = []
+            let latestYears = {}
+            greenAudits.forEach(item => {
+                if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
+                    evals.push(evalGreenAuditRecord(item))
+                    latestYears[item.hkey] = item.report_year
+                }
+            })
+            return Promise.all(evals).then(res => {
+                res.forEach(e => {
+                    cacheGreenAuditRecordForHkey(e.hkey, e)
+                    records[e.hkey] = e
+                })
+                resolve(records)
+            })
+            
+        } catch (err) {
+            reject(err)
+        }
+    })
+}
+
+exports.getGreenAuditForReportId = (id) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            let filter = `WHERE _id = '${id}'`
+            db.select("green_audits", filter).then(res => {
+                if (res.length === 0) return reject(new Error(`No green report found for ID ${id}`))
+                resolve(evalGreenAuditRecord(res[0]))
             })
         } catch (err) {
             reject(err)

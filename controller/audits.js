@@ -94,11 +94,12 @@ router.get('/', async (req, resp) => {
 
     let touchless = storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
-    
-    Promise.all([touchless, cleansafe]).then(async (result) => {
-        
+    let green = storage.getGreenAuditRecordsForHkeys(hkeys) /* TODO: Add Caching */
+
+    Promise.all([touchless, cleansafe, green]).then(async (result) => {
         let _touchless = result[0]
         let _cleansafe = result[1]
+        let _green = result[2]
 
         let data = {}
         let csTouchlessCheckin = new Set()
@@ -130,6 +131,12 @@ router.get('/', async (req, resp) => {
                     status: true
                 })
             }
+            if (hkey in _green) {
+                if (!(hkey in data)) data[hkey] = []
+                let record = _green[hkey]
+                delete record.hkey
+                data[hkey].push(record)
+            }
         }
 
         trackEvent('Audit Web Service', 'Audits Request Success', req.query.hkeys)
@@ -143,12 +150,21 @@ router.get('/', async (req, resp) => {
         await auditFetchLog.write(entry)
         resp.status(200).json(data)
     }).catch((err) => {
-        console.log(err)
         trackEvent('Audit Web Service', 'Audits Request Failure', req.query.hkeys)
         logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
         resp.status(500).json({ error: 'Server Error' })
     })  
     
+})
+
+router.get('/green/reports/:id', authMiddleware('normal'), async (req, resp) => {
+    storage.getGreenAuditForReportId(req.params.id).then(res => {
+        resp.status(200).json(res)
+    }).catch(err => {
+        trackEvent('Audit Web Service', 'Green Audit Request Failure', req.query.hkeys)
+        logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
+        resp.status(500).json({ error: 'Server Error' })
+    })
 })
 
 module.exports = router;
