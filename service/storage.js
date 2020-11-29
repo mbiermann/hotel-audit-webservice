@@ -93,30 +93,38 @@ let evalAuditRecord = (i) => {
 let getGreenhouseGasFactors = (i) => {
 
     return new Promise((resolve, reject) => {
+        const cache_key = "ghg_factors"
+        cache.get(cache_key, (err, val) => { 
+            if (!!val) {
+                resolve(JSON.parse(val))
+            } else {
+                let refrigeratorFactors = db.select("refrigerator_emission_factors")
+                let fuelFactors = db.select("mobilefuels_emission_factors")
+                let electricityFactors = db.select("electricity_emission_factors")
 
-        let refrigeratorFactors = db.select("refrigerator_emission_factors")
-        let fuelFactors = db.select("mobilefuels_emission_factors")
-        let electricityFactors = db.select("electricity_emission_factors")
+                Promise.all([refrigeratorFactors, fuelFactors, electricityFactors]).then(res => {
 
-        Promise.all([refrigeratorFactors, fuelFactors, electricityFactors]).then(res => {
+                    let refrigerants = {}
+                    res[0].forEach(e => {
+                        refrigerants[e._id] = e.factor
+                    });
 
-            let refrigerants = {}
-            res[0].forEach(e => {
-                refrigerants[e._id] = e.factor
-            });
+                    let mobileFuels = {}
+                    res[1].forEach(e => {
+                        mobileFuels[e._id] = e.factor
+                    });
 
-            let mobileFuels = {}
-            res[1].forEach(e => {
-                mobileFuels[e._id] = e.factor
-            });
+                    let electricity = {}
+                    res[2].forEach(e => {
+                        electricity[e._id] = e.factor
+                    });
 
-            let electricity = {}
-            res[2].forEach(e => {
-                electricity[e._id] = e.factor
-            });
+                    let result = {"refrigerants": refrigerants, "mobile_fuels": mobileFuels, "electricity": electricity}
+                    cache.set(cache_key, JSON.stringify(result), 'EX', process.env.REDIS_TTL)
+                    resolve(result)
 
-            resolve({"refrigerants": refrigerants, "mobile_fuels": mobileFuels, "electricity": electricity})
-
+                })
+            }
         })
 
     })   
