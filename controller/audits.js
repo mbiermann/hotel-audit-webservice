@@ -94,7 +94,7 @@ router.get('/', async (req, resp) => {
 
     let touchless = storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
-    let green = storage.getGreenAuditRecordsForHkeys(hkeys) /* TODO: Add Caching */
+    let green = storage.getGreenAuditRecordsForHkeys(hkeys)
 
     Promise.all([touchless, cleansafe, green]).then(async (result) => {
         let _touchless = result[0]

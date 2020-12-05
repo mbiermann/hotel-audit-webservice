@@ -169,6 +169,15 @@ let evalGreenAuditRecord = (i) => {
 
             }
 
+            if (i.is_renewable_energy_used) {
+                if (i.total_renewable_energy_purchased_kwh > 0) {
+                    total_electricity_kwh -= i.total_renewable_energy_purchased_kwh
+                } 
+                if (i.total_renewable_energy_generated_kwh > 0) {
+                    total_electricity_kwh -= i.total_renewable_energy_generated_kwh
+                }
+            }
+
             let totalKgCo2e = 0
 
             if (i.mobile_fuels) {
