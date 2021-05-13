@@ -4,16 +4,25 @@ const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
 const storage = require('../service/storage')
 const {middleware: citrixAccess} = require('../utils/citrix-access')
-const {createHSReport, hsReportZipLocalFilePath} = require('../service/report')
+const {createReport} = require('../service/report')
 
 if (process.env.MODE === 'REPORT') {
     router.patch('/hs-report', async (_, resp) => {
         resp.status(200).send()
-        await createHSReport()
-        await storage.uploadFile(hsReportZipLocalFilePath)
+        let filePath = await createReport('clean')
+        await storage.uploadFile(filePath)
         trackEvent('Audit Web Service', 'HS Report Created')
     })
 }
+
+router.get('/green-report', async (_, resp) => {
+    resp.status(200).send()
+    let filePath = await createReport('green')
+    console.log("Upload Zip", filePath)
+    await storage.uploadFile(filePath)
+    trackEvent('Audit Web Service', 'Green Report Created')
+})
+
 
 router.get('/hs-report', citrixAccess, (_, res) => {
     res.setHeader('Content-Disposition', 'attachment;filename=hs-report.zip')

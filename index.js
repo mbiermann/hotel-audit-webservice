@@ -10,10 +10,14 @@ const blocker = require('./utils/blocked-middleware')
 const v1 = require('./controller/v1.js')
 const {trackEvent} = require('./service/tracking')
 const storage = require('./service/storage')
+const swaggerUi = require('swagger-ui-express')
+const YAML = require('yamljs')
+const swaggerDocument = YAML.load('./swagger.yaml')
 
 process.env.service_name = package.name
 
 app.use(blocker.middleware)
+app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument /*, { explorer: true }*/))
 app.use(compression())
 app.use(bodyParser.json())
 app.use(cors())

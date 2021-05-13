@@ -8,6 +8,9 @@ const {middleware: citrixAccess} = require('../utils/citrix-access')
 const blocker = require('../utils/blocked-middleware')
 const { Logging } = require('@google-cloud/logging')
 const Excel = require('exceljs')
+const { writeToString } = require('@fast-csv/format')
+const flatten = require('flat')
+const xlsx = require('node-xlsx')
 
 let projectId = process.env.GC_PROJECT_ID
 const logging = new Logging({ projectId });
@@ -23,7 +26,6 @@ router.get('/report', authMiddleware('normal'), async (req, resp) => {
         if (isNaN(size)) size = 10
         if (size > 500) size = 500
         let offset = (page > 1 ? (page - 1) * size : 0)
-
         let where = ''
         if (('since' in req.query)) {
             if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.since))) {
@@ -31,11 +33,9 @@ router.get('/report', authMiddleware('normal'), async (req, resp) => {
             }
             where = `WHERE DATE(updated_date) >= '${req.query.since}'`
         }
-
         storage.getAuditsReport(where, offset, size).then((res) => {
             resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
-        })
-            
+        })   
     } else {
         resp.sendStatus(403)
     }
@@ -69,6 +69,56 @@ router.get('/report/touchlessstay', authMiddleware('normal'), async (req, resp) 
     }
 })
 
+router.get('/report/green_tracking', authMiddleware('normal'), async (req, resp) => {
+    
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+
+        let where = ''
+        if (('since' in req.query)) {
+            if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.since))) {
+                return resp.status(403).send({ message: 'Invalid use of parameter ´since´!' })
+            }
+            where = `WHERE DATE(_updatedDate) >= '${req.query.since}'`
+        }
+
+        storage.getGreenTrackingReport(where, offset, size).then((res) => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        })
+            
+    } else {
+        resp.sendStatus(403)
+    }
+
+})
+
+router.get('/report/green', authMiddleware('normal'), async (req, resp) => {
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+        let where = ''
+        if (('since' in req.query)) {
+            if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.since)))
+                return resp.status(403).send({ message: 'Invalid use of parameter ´since´!' })
+            where = `WHERE DATE(_updatedDate) >= '${req.query.since}'`
+        }
+        storage.getGreenAuditsReport(where, offset, size).then((res) => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        })   
+    } else {
+        resp.sendStatus(403)
+    }
+})
+
 router.get('/report/cleanandsafe_sgs_inspections_completed', citrixAccess, (req, res) => {
     storage.getCompletedSGSAudits().then(async (data) => {
         let workbook = new Excel.stream.xlsx.WorkbookWriter()
@@ -95,11 +145,14 @@ router.get('/', async (req, resp) => {
     let touchless = storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
     let green = storage.getGreenAuditRecordsForHkeys(hkeys)
+    let green_exceptions = storage.getGreenExceptionRecordsForHkeys(hkeys)
 
-    Promise.all([touchless, cleansafe, green]).then(async (result) => {
+    Promise.all([touchless, cleansafe, green, green_exceptions]).then(async (result) => {
         let _touchless = result[0]
         let _cleansafe = result[1]
         let _green = result[2]
+        let _green_exceptions = result[3]
+        console.log(_green_exceptions)
 
         let data = {}
         let csTouchlessCheckin = new Set()
@@ -136,6 +189,11 @@ router.get('/', async (req, resp) => {
                 let record = _green[hkey]
                 delete record.hkey
                 data[hkey].push(record)
+            } else if (hkey in _green_exceptions) {
+                if (!(hkey in data)) data[hkey] = []
+                let record = _green_exceptions[hkey]
+                delete record.hkey
+                data[hkey].push(record)
             }
         }
 
@@ -164,6 +222,56 @@ router.get('/green/reports/:id', authMiddleware('normal'), async (req, resp) => 
         trackEvent('Audit Web Service', 'Green Audit Request Failure', req.query.hkeys)
         logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
         resp.status(500).json({ error: 'Server Error' })
+    })
+})
+
+router.get('/green/reports/hotel/:hkey', authMiddleware('normal'), async (req, resp) => {
+    let options = {bypass_cache: (req.query["bypass_cache"] === "true")} 
+    storage.getGreenAuditRecordsForHkeys([req.params.hkey], options).then(res => {
+        if (res[req.params.hkey]) {
+            resp.status(200).json(res[req.params.hkey])
+        } else {
+            resp.status(404).json({ error: 'Not found' })
+        }
+    }).catch(err => {
+        trackEvent('Audit Web Service', 'Green Audit Request Failure', req.paams.hkey)
+        logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
+        resp.status(500).json({ error: 'Server Error' })
+    })
+})
+
+router.get('/green/reports/group/:id', authMiddleware('normal'), async (req, resp) => {
+    storage.getHotelsByChainId(req.params.id).then(hotels => {
+        const hkeys = hotels.map(x => x.hkey)
+        storage.getGreenAuditRecordsForHkeys(hkeys).then(res => {
+            let headers = []
+            let data = {}
+            hotels.forEach(x => {
+                data[x.hkey] = flatten({...x, ...res[x.hkey]}, {delimiter: "_"})
+                Object.keys(data[x.hkey]).forEach(h => {
+                    if (headers.indexOf(h) === -1) headers.push(h)
+                })
+            })
+            let out = []
+            out.push(headers)            
+            hkeys.forEach(x => {
+                let rec = []
+                if (x in data) {
+                    headers.forEach(h => rec.push(data[x][h]))
+                } else {
+                    headers.forEach(h => rec.push((h === 'hkey') ? x : null))
+                }
+                out.push(rec)
+            })   
+            var buffer = xlsx.build([{name: "report", data: out}])
+            resp.set('Content-Type', 'application/octet-stream')
+            resp.attachment(`Green Stay - Hotel Group Status Report - ${req.params.id}.xlsx`)
+            resp.status(200).send(buffer)
+        }).catch(err => {
+            trackEvent('Audit Web Service', 'Green Audit Group Report Failure', req.params.id)
+            logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
+            resp.status(500).json({ error: 'Server Error' })
+        })
     })
 })
 

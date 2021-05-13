@@ -26,9 +26,10 @@ router.get('/hotel-status', authHotelStatusAccess, (req, resp) => {
     if (!req.query || !req.query.hkeys) return resp.status(500).json({ error: 'Missing hkeys' })
     const hkeys = req.query.hkeys.split(',').map((val) => Number(val))
     
-    storage.getHotelStatusByHkeys(hkeys, false, true).then(statuses => {
+    storage.getHotelStatusByHkeys(hkeys, {green: true, clean: true} ,false, true).then(statuses => {
         resp.send(statuses)
     }).catch((err) => {
+        console.log(err)
         logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 500, "error": "Server Error"})
         resp.status(500).json({ error: 'Server Error' })
     })
@@ -46,6 +47,21 @@ router.get('/chains/:id', authHotelStatusAccess, (req, resp) => {
         })
     }).catch((err) => {
         logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 500, "error": "Server Error"})
+        resp.status(500).json({ error: 'Server Error' })
+    })
+})
+
+/**
+ * Gets sample set of hotels representing top portfolio regions for use by Hotel Audit Portal 
+ * in auditing a chain's internal emission factors to comply with Green Stay database.
+ */
+router.get('/chains/:id/sample-hotels', authHotelStatusAccess, (req, resp) => {
+    if (!req.params.id) return resp.status(500).json({ error: 'Missing chain ID' })
+    storage.getChainSampleHotels(req.params.id).then(res => {
+        if (!res) return resp.status(401).json({error: `No chain with ID ${req.params.id} available.`})
+        resp.send(res)
+    }).catch((err) => {
+        logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 500, "error": "Server Error", trace: JSON.stringify(err)})
         resp.status(500).json({ error: 'Server Error' })
     })
 })
@@ -72,6 +88,39 @@ router.get('/cs_cert/:code', (req, resp) => {
         })
     }).catch(err => {
         trackEvent('Audit Web Service', 'Cert Request Failure', 'audit_id::'+dec)
+        return resp.sendStatus(500)
+    })
+})
+
+router.get('/gs_cert/:code', (req, resp) => {
+    if (!("code" in req.params)) return resp.sendStatus(403)
+    let bytes = null
+    let dec = null
+    try {
+        bytes = CryptoJS.AES.decrypt(CryptoJS.enc.Hex.parse(req.params.code).toString(CryptoJS.enc.Base64), process.env.CERT_PASS)
+        dec = bytes.toString(CryptoJS.enc.Utf8)
+    } catch (err) {
+        return resp.sendStatus(403)
+    }
+    if (dec.length === 0) return resp.sendStatus(403)
+    storage.getGreenAuditForReportId(dec).then(async res => {
+        let hotel = await storage.getHotelByHKey(res.hkey)
+        let name = hotel.name
+        let address = hotel.city + ", " + hotel.country
+        let id = res.id
+        let year = res.report_year
+        let kgCO2ePOC = Math.round(res.kilogramCarbonPOC)
+        let lWaterPOC = Math.round(res.literWaterPOC)
+        let kgWastePOC = Math.round(res.kilogramWastePOC*100)/100
+        const data = {name:name, address:address, id:id, year:year, kgCO2ePOC: kgCO2ePOC, lWaterPOC: lWaterPOC, kgWastePOC:kgWastePOC}
+        const template = (res.greenClass === "A") ? "/gs_award.html" : "/gs_cert.html"
+        ejs.renderFile(process.cwd() + template, data, {}, function(err, str){
+            if (err) return resp.sendStatus(500)
+            trackEvent('Audit Web Service', 'Green Stay Cert Request Success', 'audit_id::'+dec+'::'+id)
+            resp.status(200).send(str)
+        })
+    }).catch(err => {
+        trackEvent('Audit Web Service', 'Green Stay Cert Request Failure', 'audit_id::'+dec)
         return resp.sendStatus(500)
     })
 })
@@ -109,9 +158,51 @@ router.get('/cs_widget_link/:type/:code', (req, resp) => {
     }
     if (dec.length === 0) return resp.sendStatus(403)
     storage.getSGSAuditById(dec).then(res => {
-        resp.redirect(`https://hotel-audit.hrs.com/clean-and-safe?utm_source=hotel_om&utm_medium=hotel_expert_widget_${req.params.type}&utm_campaign=cleansafe&utm_content=${res.hkey}`)
+        resp.redirect(`https://hotel-audit.hrs.com/clean-and-safe?utm_source=hotel_om&utm_medium=cs_hotel_expert_widget_${req.params.type}&utm_campaign=cleansafe&utm_content=${res.hkey}`)
     }).catch(err => {
         trackEvent('Audit Web Service', 'Widget Link Request Failure', 'audit_id::'+dec)
+        return resp.sendStatus(500)
+    })
+})
+
+router.get('/gs_widget/:type/:code', (req, resp) => {
+    if (!("code" in req.params)) return resp.sendStatus(403)
+    let bytes = null
+    let dec = null
+    try {
+        bytes = CryptoJS.AES.decrypt(CryptoJS.enc.Hex.parse(req.params.code).toString(CryptoJS.enc.Base64), process.env.CERT_PASS)
+        dec = bytes.toString(CryptoJS.enc.Utf8)
+    } catch (err) {
+        return resp.sendStatus(403)
+    }
+    if (dec.length === 0) return resp.sendStatus(403)
+    storage.getGreenAuditForReportId(dec).then(async res => {
+        let type = 'basic'
+        var img = fs.readFileSync(process.cwd() + (req.params.type === 'badge' ? `/gs_badge_${type}.png` : `/gs_widget_${type}.png`))
+        resp.writeHead(200, {'Content-Type': 'image/png' })
+        resp.end(img, 'binary');
+    }).catch(err => {
+        trackEvent('Audit Web Service', 'Green Stay Widget Request Failure', 'report_id::'+dec)
+        return resp.sendStatus(500)
+    })
+})
+
+router.get('/gs_widget_link/:type/:code', (req, resp) => {
+    if (!("code" in req.params)) return resp.sendStatus(403)
+    let bytes = null
+    let dec = null
+    try {
+        bytes = CryptoJS.AES.decrypt(CryptoJS.enc.Hex.parse(req.params.code).toString(CryptoJS.enc.Base64), process.env.CERT_PASS)
+        dec = bytes.toString(CryptoJS.enc.Utf8)
+    } catch (err) {
+        return resp.sendStatus(403)
+    }
+    if (dec.length === 0) return resp.sendStatus(403)
+    storage.getGreenAuditForReportId(dec).then(async res => {
+        let type = 'basic'
+        resp.redirect(`https://hotel-audit.hrs.com/clean-and-safe?utm_source=hotel_om&utm_medium=gs_hotel_${type}_widget_${req.params.type}&utm_campaign=greenstay&utm_content=${res.hkey}`)
+    }).catch(err => {
+        trackEvent('Audit Web Service', 'Green Stay Widget Link Request Failure', 'audit_id::'+dec)
         return resp.sendStatus(500)
     })
 })
@@ -133,6 +224,28 @@ router.get('/cs_sticker/:type/:code', (req, resp) => {
         resp.send(pdf);
     }).catch(err => {
         trackEvent('Audit Web Service', 'Sticker Request Failure', 'audit_id::'+dec)
+        return resp.sendStatus(500)
+    })
+})
+
+router.get('/gs_sticker/:type/:code', (req, resp) => {
+    if (!("code" in req.params)) return resp.sendStatus(403)
+    let bytes = null
+    let dec = null
+    try {
+        bytes = CryptoJS.AES.decrypt(CryptoJS.enc.Hex.parse(req.params.code).toString(CryptoJS.enc.Base64), process.env.CERT_PASS)
+        dec = bytes.toString(CryptoJS.enc.Utf8)
+    } catch (err) {
+        return resp.sendStatus(403)
+    }
+    if (dec.length === 0) return resp.sendStatus(403)
+    storage.getGreenAuditForReportId(dec).then(async res => {
+        let type = 'basic'
+        var pdf = fs.readFileSync(process.cwd() + (req.params.type === 'round' ? `/gs_sticker_round.pdf` : `/gs_sticker_rect_${type}.pdf`))
+        resp.contentType('application/pdf')
+        resp.send(pdf);
+    }).catch(err => {
+        trackEvent('Audit Web Service', 'Green Stay Sticker Request Failure', 'audit_id::'+dec)
         return resp.sendStatus(500)
     })
 })

@@ -8,12 +8,11 @@ const os = require('os')
 let csvWriter = require('csv-write-stream')
 
 const tmpDirPath = os.tmpdir()
-const hsReportLocalFilePath = `${tmpDirPath}/out.csv`
-const hsReportZipLocalFilePath = `${hsReportLocalFilePath}.zip`
 
 module.exports = {
-    hsReportZipLocalFilePath: hsReportZipLocalFilePath,
-    createHSReport: () => {
+    createReport: (type) => {
+        const hsReportLocalFilePath = `${tmpDirPath}/${type}_out.csv`
+        const hsReportZipLocalFilePath = `${hsReportLocalFilePath}.zip`
         const incr = 1000
         let data = []
         let headers = []
@@ -25,7 +24,8 @@ module.exports = {
                     for (let i = 0; i < total; i += incr) {
                         let res2 = await db.select('hotels', '', 'hkey', 'ORDER BY hkey asc', skip = i, limit = incr)
                         let hkeys = res2.map(val => val.hkey)
-                        let statuses = await storage.getHotelStatusByHkeys(hkeys, true, true, true, true, ['code'])
+                        let programs = {clean: (type === 'clean'), green: (type === 'green')}
+                        let statuses = await storage.getHotelStatusByHkeys(hkeys, programs, true, true, true, ['code'])
                         if (i === 0) {
                             for (status of statuses) {
                                 for (key of Object.keys(status)) if (headers.indexOf(key) === -1 && !!status[key]) headers.push(key)
@@ -44,17 +44,16 @@ module.exports = {
                     resolve2()
                 })
             }).then(res => {
-                logger.logEvent(logger.ReportRunStatusUpdate, {stage: "start_zip_csv"})
+                logger.logEvent(logger.ReportRunStatusUpdate, {stage: `start_zip_csv_${type}`})
                 var zip = new AdmZip();
                 zip.addLocalFile(hsReportLocalFilePath)
                 zip.writeZip(hsReportZipLocalFilePath)
-                logger.logEvent(logger.ReportRunStatusUpdate, {stage: "end_zip_csv"})
-                resolve1()
+                logger.logEvent(logger.ReportRunStatusUpdate, {stage: `end_zip_csv_${type}`})
+                resolve1(hsReportZipLocalFilePath)
             }).catch(err => {
                 logger.logEvent(logger.ReportError, {"error": err.message})
                 reject1(err)
             })  
         })
     }
-
 }
