@@ -5,24 +5,15 @@ const audits = require('./audits')
 const CryptoJS = require('crypto-js')
 const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
-const {validate: validateCitrixAccess} = require('../utils/citrix-access')
-const {validate: validateSecretAccess, middleware: authMiddleware} = require('../utils/auth-middleware')
+const {combinedAuthMiddleware: combinedAuthMiddleware} = require('../utils/auth-middleware')
 const storage = require('../service/storage')
 const ejs = require('ejs')
-const any = require('promise.any')
 const fs = require('fs')
 
 router.use('/reports', report)
 router.use('/audits', audits)
 
-const authHotelStatusAccess = (req, res, next) => {
-    any([validateCitrixAccess(req), validateSecretAccess(req)]).then(next).catch(err => {
-        res.status(401).send()
-    })
-}
-
-router.get('/hotel-status', authHotelStatusAccess, (req, resp) => {
-    
+router.get('/hotel-status', combinedAuthMiddleware, (req, resp) => {
     if (!req.query || !req.query.hkeys) return resp.status(500).json({ error: 'Missing hkeys' })
     const hkeys = req.query.hkeys.split(',').map((val) => Number(val))
     
@@ -36,26 +27,11 @@ router.get('/hotel-status', authHotelStatusAccess, (req, resp) => {
     
 })
 
-router.get('/chains/:id', authHotelStatusAccess, (req, resp) => {
-    if (!req.params.id) return resp.status(500).json({ error: 'Missing chain ID' })
-    storage.getChainStatus(req.params.id).then(status => {
-        if (!status) return resp.status(401).json({error: `No chain with ID ${req.params.id} available.`})
-        resp.send({
-            id: status.id,
-            name: status.name,
-            invitation_link: `https://www.hotel-audit.hrs.com/group-assessment/${status.id}/${status.invitation_code}`
-        })
-    }).catch((err) => {
-        logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 500, "error": "Server Error"})
-        resp.status(500).json({ error: 'Server Error' })
-    })
-})
-
 /**
  * Gets sample set of hotels representing top portfolio regions for use by Hotel Audit Portal 
  * in auditing a chain's internal emission factors to comply with Green Stay database.
  */
-router.get('/chains/:id/sample-hotels', authHotelStatusAccess, (req, resp) => {
+router.get('/chains/:id/sample-hotels', combinedAuthMiddleware, (req, resp) => {
     if (!req.params.id) return resp.status(500).json({ error: 'Missing chain ID' })
     storage.getChainSampleHotels(req.params.id).then(res => {
         if (!res) return resp.status(401).json({error: `No chain with ID ${req.params.id} available.`})
@@ -248,25 +224,6 @@ router.get('/gs_sticker/:type/:code', (req, resp) => {
         trackEvent('Audit Web Service', 'Green Stay Sticker Request Failure', 'audit_id::'+dec)
         return resp.sendStatus(500)
     })
-})
-
-router.get('/invitations/hotels', authMiddleware('invitations'), (req, resp) => {
-    if (!!req.query && !!req.query.page && !!req.query.size) {
-        let page = Number(req.query.page)
-        if (isNaN(page) || page === 0) page = 1
-        let size = Number(req.query.size)
-        if (isNaN(size)) size = 10
-        if (size > 500) size = 500
-        let offset = (page > 1 ? (page - 1) * size : 0)
-        storage.getInvitations(offset, size).then(res => {
-            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
-        }).catch(err => {
-            trackEvent('Audit Web Service', 'Get Hotel Invitations Failure')
-            return resp.sendStatus(500)
-        })     
-    } else {
-        resp.sendStatus(403)
-    }
 })
 
 module.exports = router;

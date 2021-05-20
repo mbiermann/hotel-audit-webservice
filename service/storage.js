@@ -23,6 +23,17 @@ const mandatoryChecksByService = {
     }
 }
 
+exports.getAuth = (client_id, client_secret_sha256) => {
+    return new Promise(async (resolve, reject) => {
+        let filter = `WHERE id = '${client_id}' AND secret_sha256 = '${client_secret_sha256}'`
+        let res = await db.select("api_clients", filter)
+        if (res.length === 0) return reject("No such client")
+        let auth = res[0]
+        auth.grants = auth.grants.split(",")
+        resolve(auth)
+    })
+}
+
 const getCachedAuditRecordsForHkeys = (hkeys) => {
     return new Promise((resolve, reject) => {
         let data = {}
@@ -307,6 +318,14 @@ let evalGreenExceptionRecord = (i) => {
     })
 } 
 
+let evalGeosureRecord = (i) => {
+    return new Promise((resolve, reject) => {
+        i.type = "geosure"
+        i.status = true
+        resolve(i)
+    })
+}
+
 const getProgram = async (hkey) => {
     let res = await db.select("green_programs", `WHERE hkey = '${hkey}'`)
     return res[0]
@@ -523,6 +542,32 @@ exports.getGreenAuditRecordsForHkeys = (hkeys, options) => {
     })
 }
 
+exports.getGeosureRecordsForHkeys = (hkeys, options) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
+            if (hkeys.length === 0) return resolve([])
+            let records = (options && options.bypass_cache) ? {} : (await getCachedGeosureRecordsForHkeys(hkeys))
+            const hkeysFromCache = Object.keys(records).map(e => Number(e))
+            let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
+            if (leftHkeys.length === 0) return resolve(records)
+            let filter = `WHERE hkey IN (${leftHkeys})`
+            let geosures = await db.select("hotels_gs_view", filter)
+            let evals = geosures.map(item => evalGeosureRecord(item))
+            return Promise.all(evals).then(res => {
+                res.forEach(e => {
+                    cacheGeosureRecordForHkey(e.hkey, e)
+                    records[e.hkey] = e
+                })
+                resolve(records)
+            })
+            
+        } catch (err) {
+            reject(err)
+        }
+    })
+}
+
 exports.getGreenExceptionRecordsForHkeys = (hkeys, options) => {
     return new Promise(async (resolve, reject) => {
         try {
@@ -586,6 +631,25 @@ const getCachedTouchlessStatusForHKeys = (hkeys) => {
                 })
             }))
         }
+        Promise.all(proms).then(_ => {
+            resolve(data)
+        })
+    })   
+}
+
+const cacheGeosureRecordForHkey = (hkey, elem) => {
+    cache.set(`geosure:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL)
+}
+
+const getCachedGeosureRecordsForHkeys = (hkeys) => {
+    return new Promise((resolve) => {
+        let data = {}
+        let proms = hkeys.map((hkey) => new Promise((resolve, reject) => {
+            cache.get(`geosure:${hkey}`, (err, val) => {
+                if (val !== null) data[hkey] = JSON.parse(val)
+                resolve()
+            })
+        }))
         Promise.all(proms).then(_ => {
             resolve(data)
         })
@@ -701,10 +765,25 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
 exports.getAuditsReport = (where, offset, size) => {
     return new Promise((resolve, reject) => {
         db.query(`SELECT * FROM audits_full ${where} ORDER BY id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
-            db.query(`SELECT COUNT(*) as 'count' FROM audits_full ${where}`, [], (snd) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM audits_full ${where}`, [], async (snd) => {
                 let proms = []
                 for (let item of fst) {
-                    const i = evalAuditRecord(item)
+                    const i = await evalAuditRecord(item)
+                    proms.push(i)
+                }
+                Promise.all(proms).then(res => resolve({result: res, total: snd[0]['count']}))
+            })
+        })
+    })
+}
+
+exports.getGeosureReport = (where, offset, size) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT * FROM hotels_gs_view ${where} ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM hotels_gs_view ${where}`, [], async (snd) => {
+                let proms = []
+                for (let item of fst) {
+                    const i = await evalGeosureRecord(item)
                     proms.push(i)
                 }
                 Promise.all(proms).then(res => resolve({result: res, total: snd[0]['count']}))
@@ -714,7 +793,7 @@ exports.getAuditsReport = (where, offset, size) => {
 }
 
 exports.getGreenAuditsReport = (where, offset, size) => {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
         db.query(`SELECT * FROM green_audits ${where} ORDER BY _id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
             db.query(`SELECT COUNT(*) as 'count' FROM green_audits ${where}`, [], (snd) => {
                 let proms = []
@@ -725,6 +804,23 @@ exports.getGreenAuditsReport = (where, offset, size) => {
                 Promise.all(proms).then(res => resolve({result: res, total: snd[0]['count']}))
             })
         })
+    })
+}
+
+exports.getGreenExceptionsReport = (where, offset, size) => {
+    return new Promise(async (resolve, reject) => {
+        db.query(`SELECT * FROM green_exceptions ${where} ORDER BY _id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM green_exceptions ${where}`, [], (snd) => {
+                let proms = []
+                let latestReportYear = 2019
+                for (let item of fst) {
+                    if (item.opening_date < new Date(latestReportYear+1, 0)) {
+                        proms.push(evalGreenExceptionRecord(item))
+                    }
+                }
+                Promise.all(proms).then(res => resolve({result: res, total: snd[0]['count']}))
+            })
+        })            
     })
 }
 
@@ -758,26 +854,10 @@ exports.getAllTouchlessStatus = (where, offset, size) => {
     })
 }
 
-exports.getChainStatus = (id) => {
-    return new Promise((resolve, reject) => {
-        db.query(`SELECT * FROM chains WHERE id = ${db.escape(id)} LIMIT 1`, [], (res) => {
-            return resolve(res[0])
-        })
-    })
-}
-
 exports.getSGSAuditById = (id) => {
     return new Promise((resolve, reject) => {
         db.query(`SELECT * FROM sgs_audits_view WHERE audit_id = "${id}" LIMIT 1`, [], (res) => {
             return resolve(res[0])
-        })
-    })
-}
-
-exports.getCompletedSGSAudits = () => {
-    return new Promise((resolve, reject) => {
-        db.query(`SELECT hkey, audit_id, date FROM sgs_audits_view WHERE status="Closed"`, [], (res) => {
-            return resolve(res)
         })
     })
 }
@@ -788,32 +868,6 @@ exports.uploadFile = (filename) => {
 
 exports.readFileStream = (filename) => {
     return cloudStorage.readFileStream(filename)
-}
-
-exports.getClients = (id) => {
-    return new Promise((resolve, reject) => {
-        db.query(`SELECT * FROM clients`, [], (res) => {
-            return resolve(res)
-        })
-    })
-}
-
-exports.getClientDataForId = (id) => {
-    return new Promise((resolve, reject) => {
-        db.query(`SELECT * FROM 2020_rfp A LEFT JOIN rfps B ON A.rfp_id = B.id WHERE B.client_id = ${db.escape(id)} AND rfp_status = 'accepted'`, [], (res) => {
-            return resolve(res)
-        })
-    })
-}
-
-exports.getInvitations = (offset, size) => {
-    return new Promise((resolve, reject) => {
-        db.query(`SELECT hkey, code FROM hotels ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
-            db.query(`SELECT COUNT(*) as 'count' FROM hotels`, [], (snd) => {
-                resolve({result: fst, total: snd[0]['count']})
-            })
-        })
-    })
 }
 
 exports.getHotelsByChainId = (id) => {

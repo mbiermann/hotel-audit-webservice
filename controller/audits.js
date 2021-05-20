@@ -3,8 +3,7 @@ const router = express.Router()
 const storage = require('../service/storage')
 const logger = require('../utils/logger')
 const { trackEvent } = require('../service/tracking')
-const { middleware: authMiddleware } = require('../utils/auth-middleware')
-const {middleware: citrixAccess} = require('../utils/citrix-access')
+const { combinedAuthMiddleware: combinedAuthMiddleware } = require('../utils/auth-middleware')
 const blocker = require('../utils/blocked-middleware')
 const { Logging } = require('@google-cloud/logging')
 const Excel = require('exceljs')
@@ -17,7 +16,7 @@ const logging = new Logging({ projectId });
 const logName = process.env.GC_FETCHLOG
 const auditFetchLog = logging.log(logName);
 
-router.get('/report', authMiddleware('normal'), async (req, resp) => {
+router.get('/report', combinedAuthMiddleware, async (req, resp) => {
     
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
@@ -42,7 +41,7 @@ router.get('/report', authMiddleware('normal'), async (req, resp) => {
 
 })
 
-router.get('/report/touchlessstay', authMiddleware('normal'), async (req, resp) => {
+router.get('/report/touchlessstay', combinedAuthMiddleware, async (req, resp) => {
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
         if (isNaN(page) || page === 0) page = 1
@@ -69,7 +68,7 @@ router.get('/report/touchlessstay', authMiddleware('normal'), async (req, resp) 
     }
 })
 
-router.get('/report/green_tracking', authMiddleware('normal'), async (req, resp) => {
+router.get('/report/green_tracking', combinedAuthMiddleware, async (req, resp) => {
     
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
@@ -97,7 +96,7 @@ router.get('/report/green_tracking', authMiddleware('normal'), async (req, resp)
 
 })
 
-router.get('/report/green', authMiddleware('normal'), async (req, resp) => {
+router.get('/report/green', combinedAuthMiddleware, async (req, resp) => {
     if (!!req.query && !!req.query.page && !!req.query.size) {
         let page = Number(req.query.page)
         if (isNaN(page) || page === 0) page = 1
@@ -119,81 +118,127 @@ router.get('/report/green', authMiddleware('normal'), async (req, resp) => {
     }
 })
 
-router.get('/report/cleanandsafe_sgs_inspections_completed', citrixAccess, (req, res) => {
-    storage.getCompletedSGSAudits().then(async (data) => {
-        let workbook = new Excel.stream.xlsx.WorkbookWriter()
-        let worksheet = workbook.addWorksheet('SGS Inspections Completed')
-        worksheet.columns = [{header: 'HKey', key: 'hkey'},{header: 'Audit ID', key: 'audit_id'},{header: 'Date', key: 'date'}]
-        data.forEach((e, index) => { worksheet.addRow({...e}).commit() })
-        worksheet.commit()
-        await workbook.commit()
-        let stream = workbook.stream.read()
-        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-        res.setHeader('Content-Disposition', `attachment; filename=cleanandsafe_sgs_inspections_completed.xlsx`)
-        res.setHeader('Content-Length', stream.length)
-        res.send(stream)
-    })
+router.get('/report/green_exceptions', combinedAuthMiddleware, async (req, resp) => {
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+        let where = ''
+        if (('since' in req.query)) {
+            if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.since)))
+                return resp.status(403).send({ message: 'Invalid use of parameter ´since´!' })
+            where = `WHERE DATE(_updatedDate) >= '${req.query.since}'`
+        }
+        storage.getGreenExceptionsReport(where, offset, size).then((res) => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        })   
+    } else {
+        resp.sendStatus(403)
+    }
 })
 
-router.get('/', async (req, resp) => {
+router.get('/report/geosure', combinedAuthMiddleware, async (req, resp) => {
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+        let where = ''
+        if (('since' in req.query)) {
+            if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.since))) {
+                return resp.status(403).send({ message: 'Invalid use of parameter ´since´!' })
+            }
+            where = `WHERE DATE(date) >= '${req.query.since}'`
+        }
+        storage.getGeosureReport(where, offset, size).then((res) => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        })   
+    } else {
+        resp.sendStatus(403)
+    }
+})
+
+
+router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
     let startDate = new Date()
     
     let hkeys = []
     if (!!req.query && !!req.query.hkeys) hkeys = req.query.hkeys.split(',')
+    let exclude = []
+    if (!!req.query && !!req.query.exclude) exclude = req.query.exclude.split(',')
 
-    let touchless = storage.getTouchlessStatusForHkeys(hkeys)
-    let cleansafe = storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
-    let green = storage.getGreenAuditRecordsForHkeys(hkeys)
-    let green_exceptions = storage.getGreenExceptionRecordsForHkeys(hkeys)
+    let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
+    let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
+    let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys)
+    let green_exceptions = (exclude.includes('green')) ? null : storage.getGreenExceptionRecordsForHkeys(hkeys)
+    let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
 
-    Promise.all([touchless, cleansafe, green, green_exceptions]).then(async (result) => {
+    Promise.all([touchless, cleansafe, green, green_exceptions, geosure]).then(async (result) => {
         let _touchless = result[0]
         let _cleansafe = result[1]
         let _green = result[2]
         let _green_exceptions = result[3]
-        console.log(_green_exceptions)
+        let _geosure = result[4]
 
         let data = {}
         let csTouchlessCheckin = new Set()
         
-        const defaultKeys = ['auditor_key', 'audit_date', 'program_name', 'link']
-        for (let hkey of Object.keys(_cleansafe)) {
-            for (let elem of _cleansafe[hkey]) {
-                if (!data[hkey]) data[hkey] = []
-                let item = {
-                    id: elem._id,
-                    type: elem.type,
-                    status: elem.status,
-                    created_date: elem._createdDate,
-                    updated_date: elem._updatedDate
+        if (!(exclude.includes('cleansafe'))) {
+            const defaultKeys = ['auditor_key', 'audit_date', 'program_name', 'link']
+            for (let hkey of Object.keys(_cleansafe)) {
+                for (let elem of _cleansafe[hkey]) {
+                    if (!data[hkey]) data[hkey] = []
+                    let item = {
+                        id: elem._id,
+                        type: elem.type,
+                        status: elem.status,
+                        created_date: elem._createdDate,
+                        updated_date: elem._updatedDate
+                    }
+                    for (let key of defaultKeys) {
+                        if (elem[key]) item[key] = elem[key]
+                    }
+                    data[hkey].push(item)
+                    if (!!elem.status && elem.checked.split(',').indexOf("13") > -1) csTouchlessCheckin.add(hkey)
                 }
-                for (let key of defaultKeys) {
-                    if (elem[key]) item[key] = elem[key]
-                }
-                data[hkey].push(item)
-                if (!!elem.status && elem.checked.split(',').indexOf("13") > -1) csTouchlessCheckin.add(hkey)
             }
-        }
+        }        
 
         for (let hkey of hkeys) {
-            if (csTouchlessCheckin.has(hkey) || _touchless.indexOf(Number(hkey)) > -1) {
-                if (!(hkey in data)) data[hkey] = []
-                data[hkey].push({
-                    type: 'touchless_stay',
-                    status: true
-                })
+            if (!(exclude.includes('touchless'))) {
+                if (csTouchlessCheckin.has(hkey) || _touchless.indexOf(Number(hkey)) > -1) {
+                    if (!(hkey in data)) data[hkey] = []
+                    data[hkey].push({
+                        type: 'touchless_stay',
+                        status: true
+                    })
+                }
             }
-            if (hkey in _green) {
-                if (!(hkey in data)) data[hkey] = []
-                let record = _green[hkey]
-                delete record.hkey
-                data[hkey].push(record)
-            } else if (hkey in _green_exceptions) {
-                if (!(hkey in data)) data[hkey] = []
-                let record = _green_exceptions[hkey]
-                delete record.hkey
-                data[hkey].push(record)
+            if (!(exclude.includes('green'))) {
+                if (hkey in _green) {
+                    if (!(hkey in data)) data[hkey] = []
+                    let record = _green[hkey]
+                    delete record.hkey
+                    data[hkey].push(record)
+                } else if (hkey in _green_exceptions) {
+                    if (!(hkey in data)) data[hkey] = []
+                    let record = _green_exceptions[hkey]
+                    delete record.hkey
+                    data[hkey].push(record)
+                }
+            }
+            if (!(exclude.includes('geosure'))) {
+                if (hkey in _geosure) {
+                    if (!(hkey in data)) data[hkey] = []
+                    delete _geosure[hkey].hkey
+                    data[hkey].push(_geosure[hkey])
+                }
             }
         }
 
@@ -215,7 +260,7 @@ router.get('/', async (req, resp) => {
     
 })
 
-router.get('/green/reports/:id', authMiddleware('normal'), async (req, resp) => {
+router.get('/green/reports/:id', combinedAuthMiddleware, async (req, resp) => {
     storage.getGreenAuditForReportId(req.params.id).then(res => {
         resp.status(200).json(res)
     }).catch(err => {
@@ -225,7 +270,7 @@ router.get('/green/reports/:id', authMiddleware('normal'), async (req, resp) => 
     })
 })
 
-router.get('/green/reports/hotel/:hkey', authMiddleware('normal'), async (req, resp) => {
+router.get('/green/reports/hotel/:hkey', combinedAuthMiddleware, async (req, resp) => {
     let options = {bypass_cache: (req.query["bypass_cache"] === "true")} 
     storage.getGreenAuditRecordsForHkeys([req.params.hkey], options).then(res => {
         if (res[req.params.hkey]) {
@@ -240,7 +285,7 @@ router.get('/green/reports/hotel/:hkey', authMiddleware('normal'), async (req, r
     })
 })
 
-router.get('/green/reports/group/:id', authMiddleware('normal'), async (req, resp) => {
+router.get('/green/reports/group/:id', combinedAuthMiddleware, async (req, resp) => {
     storage.getHotelsByChainId(req.params.id).then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
         storage.getGreenAuditRecordsForHkeys(hkeys).then(res => {

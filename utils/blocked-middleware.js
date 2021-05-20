@@ -2,25 +2,39 @@ const cache = require('../client/cache')
 const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
 
-module.exports = {
-    middleware: (req, res, next) => {
-        let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress
-        ip = ip.split(",")[0]
-        cache.get('block:'+ip, (err, reply) => {
-            if (reply) {
-                trackEvent('Audit Web Service', 'Blocked Access', ip)
-                logger.logEvent(logger.EventBlockedAccessError, ip)
-                return res.status(403).json({error: "You're blocked from this service"})
-            }
+let middleware = (req, res, next) => {
+    let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress
+    ip = ip.split(",")[0]
+    cache.get('block:'+ip, (err, reply) => {
+        if (reply) {
+            block(req, (timeout) => {
+                trackEvent('Audit Web Service', 'Blocked Access', {ip: ip, timeout: timeout})
+                logger.logEvent(logger.EventBlockedAccessError, {ip: ip, timeout: timeout})
+                return res.status(403).json({error: true, message: `You're blocked now for ${timeout} seconds this service`})
+            })
+        } else {
             next()
-        })
-    },
-    block: (req, handler) => {
-        let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress
-        ip = ip.split(",")[0]
-        cache.set('block:'+ip, JSON.stringify({block: ip}), 'EX', process.env.REDIS_TTL);
-        logger.logEvent(logger.EventBlockError, ip)
-        trackEvent('Audit Web Service', 'Blocked IP', ip)
-        handler()
-    }
+        }
+    })
+}
+
+let block = (req, handler) => {
+    let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress
+    ip = ip.split(",")[0]
+    let timeout = 10
+    cache.get('block:'+ip, (err, reply) => {
+        reply = JSON.parse(reply)
+        if (reply) {
+            timeout = reply.timeout * 2
+        }
+        cache.set('block:'+ip, JSON.stringify({block: ip, timeout: timeout}), 'EX', timeout);
+        logger.logEvent(logger.EventBlockError, {ip: ip, timeout: timeout})
+        trackEvent('Audit Web Service', 'Blocked IP', {ip: ip, timeout: timeout})
+        handler(timeout)
+    })
+}
+
+module.exports = {
+    middleware: middleware,
+    block: block
 }

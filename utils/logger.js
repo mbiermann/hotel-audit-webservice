@@ -11,8 +11,6 @@ class Logger {
         this.EventAuditCacheError = "AuditCacheError"
         this.EventURLShortenError = "URLShortenError"
         this.EventServiceResponse = "ServiceResponse",
-        this.RateLimiterRedisError = "RateLimiterError",
-        this.RateLimiterLimitReached = "RateLimiterLimitReached",
         this.ReportError = "ReportError",
         this.EventSecretKeyError = "EventSecretKeyError",
         this.EventBlockedAccessError = "EventBlockedAccessError",
