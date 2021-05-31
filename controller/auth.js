@@ -3,6 +3,8 @@ const jwt = require('jsonwebtoken')
 const router = express.Router()
 const storage = require('../service/storage')
 const SHA256 = require("crypto-js/sha256")
+const {combinedAuthMiddleware: combinedAuthMiddleware} = require('.././utils/auth-middleware')
+
 
 router.post('/login', async (req, res) => {
     const postData = req.body
@@ -49,6 +51,10 @@ router.post('/refresh', async (req,res) => {
         })
     }
     
+})
+
+router.get('/jwt-test', combinedAuthMiddleware, (req, res) => {
+    res.status(200).json(req.auth)
 })
 
 module.exports = router;

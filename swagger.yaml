@@ -350,6 +350,25 @@ paths:
             type: "array"
             items:
               $ref: "#/definitions/RefreshTokenResponse"
+  /auth/jwt-test:
+    get:
+      tags:
+      - "v2"
+      operationId: "getJWTTest"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/auth/jwt-test
+      produces:
+      - "application/json"
+      responses:
+        "200":
+          description: "Successful operation"
+          schema:
+            $ref: "#/definitions/JWTTestResponse"
+        "401":
+          description: "Unauthorized access"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
   /v2/hotel-status:
     get:
       tags:
@@ -825,6 +844,21 @@ securityDefinitions:
     name: "x-access-token"
     in: "header"
 definitions:
+  JWTTestResponse:
+    type: "object"
+    properties:
+      client_id:
+        type: "string"
+      iat:
+        type: "integer"
+        description: "Unix timestamp of time of issuance of the access token"
+      exp:
+        type: "integer"
+        description: "Unix timestamp of time of expiry of the access token"
+      grants:
+        type: "array"
+        items:
+          type: string
   TokenRequest:
     type: "object"
     properties:

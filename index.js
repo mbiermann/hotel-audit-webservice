@@ -17,8 +17,6 @@ const YAML = require('yamljs')
 const swaggerDocument = YAML.load('./swagger.yaml')
 const {middleware: jwtAuth} = require('./utils/jwt-auth')
 
-const {combinedAuthMiddleware: combinedAuthMiddleware} = require('./utils/auth-middleware')
-
 process.env.service_name = package.name
 
 app.use(blocker.middleware)
@@ -28,10 +26,6 @@ app.use(bodyParser.json())
 app.use(cors())
 
 app.use('/auth', auth)
-
-app.get('/jwt-test', combinedAuthMiddleware, (req, res) => {
-    res.status(200).json(req.auth)
-})
 
 app.use('/v1', v1)
 app.use('/v2', v2)
