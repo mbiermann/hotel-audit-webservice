@@ -20,7 +20,7 @@ const {combinedAuthMiddleware: combinedAuthMiddleware} = require('./utils/auth-m
 
 process.env.service_name = package.name
 
-//app.use(blocker.middleware)
+app.use(blocker.middleware)
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument /*, { explorer: true }*/))
 app.use(compression())
 app.use(bodyParser.json())

@@ -15,7 +15,7 @@ if (process.env.MODE === 'REPORT') {
     })
 }
 
-router.get('/green-report', async (_, resp) => {
+router.get('/green-report', combinedAuthMiddleware, async (_, resp) => {
     resp.status(200).send()
     let filePath = await createReport('green')
     console.log("Upload Zip", filePath)

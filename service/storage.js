@@ -111,6 +111,16 @@ let evalAuditRecord = (i) => {
     })
 } 
 
+exports.getInvitations = (offset, size) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT hkey, code FROM hotels ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM hotels`, [], (snd) => {
+                resolve({result: fst, total: snd[0]['count']})
+            })
+        })
+    })
+}
+
 let getGreenhouseGasFactors = (i) => {
 
     return new Promise((resolve, reject) => {

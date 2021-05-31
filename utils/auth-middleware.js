@@ -11,10 +11,12 @@ const combinedAuthMiddleware = (req, res, next) => {
     any([validateCitrixAccess(req), validateJWTAccess(req)]).then(next).catch(err => {
         trackEvent('Audit Web Service', 'Authentication error', JSON.stringify(err))
         logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 401, "error": "Authentication Error", trace: err })
-        res.status(401).json({
-            error: true,
-            message: `Unauthorized access.`
-        })
+        blocker.block(req, (timeout) => {
+            res.status(401).json({
+                error: true,
+                message: `Unauthorized access. You're blocked from this service for ${timeout} seconds.`
+            })
+        })        
     })
 }
 
