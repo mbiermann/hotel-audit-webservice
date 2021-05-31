@@ -11,7 +11,7 @@ schemes:
 paths:
   /docs:
     get:
-      summary: ""
+      summary: "Swagger API Documentation"
       description: ""
       operationId: "getSwaggerDoc"
       x-google-backend:
