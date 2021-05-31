@@ -8,6 +8,7 @@ const logger = require('./utils/logger')
 const package = require('./package.json')
 const blocker = require('./utils/blocked-middleware')
 const v1 = require('./controller/v1.js')
+const v2 = require('./controller/v2.js')
 const auth = require('./controller/auth.js')
 const {trackEvent} = require('./service/tracking')
 const storage = require('./service/storage')
@@ -33,6 +34,7 @@ app.get('/jwt-test', combinedAuthMiddleware, (req, res) => {
 })
 
 app.use('/v1', v1)
+app.use('/v2', v2)
 
 app.get('/favicon.ico', (req, res) => res.status(200))
 

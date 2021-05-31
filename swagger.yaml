@@ -9,22 +9,11 @@ host: "api.hotel-audit.hrs.com"
 schemes:
 - "https"
 paths:
-  /docs:
-    get:
-      summary: "Swagger API Documentation"
-      description: ""
-      operationId: "getSwaggerDoc"
-      x-google-backend:
-        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/docs
-      produces:
-      - "text/html"
-      responses:
-        "200":
-          description: "Successful operation"
   /v1/hotel-status:
     get:
       tags:
       - "v1"
+      deprecated: true
       summary: ""
       description: ""
       operationId: "getHotelStatus"
@@ -53,6 +42,7 @@ paths:
     get:
       tags:
       - "v1"
+      deprecated: true
       summary: "Pagination on Clean & Safe invitations"
       description: "Paginated listing of Clean & Safe invitations"
       operationId: "getHotelInvitations"
@@ -90,6 +80,7 @@ paths:
     get:
       tags:
       - "v1"
+      deprecated: true
       summary: ""
       description: ""
       operationId: "getAudits"
@@ -118,6 +109,7 @@ paths:
     get:
       tags:
       - "v1"
+      deprecated: true
       summary: "Pagination on Clean & Safe audits"
       description: "Paginated listing of Clean & Safe audit reports"
       operationId: "getAuditReports"
@@ -159,6 +151,7 @@ paths:
     get:
       tags:
       - "v1"
+      deprecated: true
       summary: "Pagination on Touchless Stay audits"
       description: "Paginated listing of Touchless Stay audit reports"
       operationId: "getTouchlessStayReports"
@@ -309,119 +302,6 @@ paths:
           description: "Forbidden"
         "500":
           description: "Server error"
-  /v1/gs_cert/{code}:
-    get:
-      tags:
-      - "v1"
-      summary: "Green Stay Certificate"
-      description: "Green Stay Certificate"
-      operationId: "getGreenStayCert"
-      x-google-backend:
-        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      produces:
-      - "text/html"
-      parameters:
-      - name: "code"
-        in: "path"
-        description: "Request code of certificate"
-        type: "string"
-        required: true
-      responses:
-        "200":
-          description: "Successful operation"
-        "403":
-          description: "Forbidden"
-        "500":
-          description: "Server error"
-  /v1/gs_widget/{type}/{code}:
-    get:
-      tags:
-      - "v1"
-      summary: "Green Stay Widget"
-      description: "Green Stay Widget"
-      operationId: "getGreenStayWidget"
-      x-google-backend:
-        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      produces:
-      - "image/png"
-      parameters:
-      - name: "type"
-        in: "path"
-        description: "Type of widget"
-        type: "string"
-        required: true
-      - name: "code"
-        in: "path"
-        description: "Request code of widget"
-        type: "string"
-        required: true
-      responses:
-        "200":
-          description: "Successful operation"
-        "403":
-          description: "Forbidden"
-        "500":
-          description: "Server error"
-  /v1/gs_widget_link/{type}/{code}:
-    get:
-      tags:
-      - "v1"
-      summary: "Green Stay Widget Link Redirect"
-      description: "Green Stay Link Redirect"
-      operationId: "getGreenStayLink"
-      x-google-backend:
-        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      parameters:
-      - name: "type"
-        in: "path"
-        description: "Type of widget"
-        type: "string"
-        required: true
-      - name: "code"
-        in: "path"
-        description: "Request code of widget"
-        type: "string"
-        required: true
-      responses:
-        "302":
-          description: "Successful operation"
-        "403":
-          description: "Forbidden"
-        "500":
-          description: "Server error"
-  /v1/gs_sticker/{type}/{code}:
-    get:
-      tags:
-      - "v1"
-      summary: "Green Stay Sticker"
-      description: "Green Stay Sticker"
-      operationId: "getGreenStaySticker"
-      x-google-backend:
-        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
-        path_translation: APPEND_PATH_TO_ADDRESS
-      produces:
-      - "application/pdf"
-      parameters:
-      - name: "type"
-        in: "path"
-        description: "Type of widget"
-        type: "string"
-        required: true
-      - name: "code"
-        in: "path"
-        description: "Request code of widget"
-        type: "string"
-        required: true
-      responses:
-        "200":
-          description: "Successful operation"
-        "403":
-          description: "Forbidden"
-        "500":
-          description: "Server error"
   /auth/login:
     post:
       tags:
@@ -473,7 +353,7 @@ paths:
   /v2/hotel-status:
     get:
       tags:
-      - "v1"
+      - "v2"
       summary: ""
       description: ""
       operationId: "getHotelStatusV2"
@@ -502,7 +382,7 @@ paths:
   /v2/invitations/hotels:
     get:
       tags:
-      - "v1"
+      - "v2"
       summary: "Pagination on Clean & Safe invitations"
       description: "Paginated listing of Clean & Safe invitations"
       operationId: "getHotelInvitationsV2"
@@ -818,6 +698,119 @@ paths:
       security:
       - v2_auth_query: []
       - v2_auth_header: []
+  /v2/gs_cert/{code}:
+    get:
+      tags:
+      - "v2"
+      summary: "Green Stay Certificate"
+      description: "Green Stay Certificate"
+      operationId: "getGreenStayCert"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "text/html"
+      parameters:
+      - name: "code"
+        in: "path"
+        description: "Request code of certificate"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v2/gs_widget/{type}/{code}:
+    get:
+      tags:
+      - "v2"
+      summary: "Green Stay Widget"
+      description: "Green Stay Widget"
+      operationId: "getGreenStayWidget"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "image/png"
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v2/gs_widget_link/{type}/{code}:
+    get:
+      tags:
+      - "v2"
+      summary: "Green Stay Widget Link Redirect"
+      description: "Green Stay Link Redirect"
+      operationId: "getGreenStayLink"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "302":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v2/gs_sticker/{type}/{code}:
+    get:
+      tags:
+      - "v2"
+      summary: "Green Stay Sticker"
+      description: "Green Stay Sticker"
+      operationId: "getGreenStaySticker"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "application/pdf"
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
 securityDefinitions:
   v1_auth:
     type: "apiKey"
