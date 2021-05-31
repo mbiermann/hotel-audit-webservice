@@ -1,0 +1,858 @@
+swagger: "2.0"
+info:
+  version: "2.0.0"
+  title: "Hotel Audit System API"
+  description: "Please consider that resources with a lock require a valid secretKey query parameter on the /v1 path (\"v1_auth\") and a valid JWT access token (\"v2_auth_query\" or \"v2_auth_header\") on the /v2 path."
+  contact:
+    email: "martin.biermann@hrs.com"
+host: "api.hotel-audit.hrs.com"
+schemes:
+- "https"
+paths:
+  /v1/hotel-status:
+    get:
+      tags:
+      - "v1"
+      summary: ""
+      description: ""
+      operationId: "getHotelStatus"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app/v1/hotel-status
+      produces:
+      - "application/json"
+      parameters:
+      - name: "hkeys"
+        in: "query"
+        description: "Comma-separated list of hkeys"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v1_auth: []
+  /v1/invitations/hotels:
+    get:
+      tags:
+      - "v1"
+      summary: "Pagination on Clean & Safe invitations"
+      description: "Paginated listing of Clean & Safe invitations"
+      operationId: "getHotelInvitations"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app/v1/invitations/hotels
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v1_auth: []
+  /v1/audits:
+    get:
+      tags:
+      - "v1"
+      summary: ""
+      description: ""
+      operationId: "getAudits"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app/v1/audits
+      produces:
+      - "application/json"
+      parameters:
+      - name: "hkeys"
+        in: "query"
+        description: "Comma-separated list of hkeys"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v1_auth: []
+  /v1/audits/report:
+    get:
+      tags:
+      - "v1"
+      summary: "Pagination on Clean & Safe audits"
+      description: "Paginated listing of Clean & Safe audit reports"
+      operationId: "getAuditReports"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app/v1/audits/report
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v1_auth: []
+  /v1/audits/report/touchlessstay:
+    get:
+      tags:
+      - "v1"
+      summary: "Pagination on Touchless Stay audits"
+      description: "Paginated listing of Touchless Stay audit reports"
+      operationId: "getTouchlessStayReports"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app/v1/audits/report/touchlessstay
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v1_auth: []
+  /v1/cs_cert/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Clean & Safe Certificate"
+      description: "Clean & Safe Certificate"
+      operationId: "getCleanSafeCert"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "text/html"
+      parameters:
+      - name: "code"
+        in: "path"
+        description: "Request code of certificate"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/cs_widget/{type}/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Clean & Safe Widget"
+      description: "Clean & Safe Widget"
+      operationId: "getCleanSafeWidget"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "image/png"
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/cs_sticker/{type}/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Clean & Safe Sticker"
+      description: "Clean & Safe Sticker"
+      operationId: "getCleanSafeSticker"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "application/pdf"
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/cs_widget_link/{type}/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Clean & Safe Widget Link Redirect"
+      description: "Clean & Safe Link Redirect"
+      operationId: "getCleanSafeLink"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "302":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/gs_cert/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Green Stay Certificate"
+      description: "Green Stay Certificate"
+      operationId: "getGreenStayCert"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "text/html"
+      parameters:
+      - name: "code"
+        in: "path"
+        description: "Request code of certificate"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/gs_widget/{type}/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Green Stay Widget"
+      description: "Green Stay Widget"
+      operationId: "getGreenStayWidget"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "image/png"
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/gs_widget_link/{type}/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Green Stay Widget Link Redirect"
+      description: "Green Stay Link Redirect"
+      operationId: "getGreenStayLink"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "302":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /v1/gs_sticker/{type}/{code}:
+    get:
+      tags:
+      - "v1"
+      summary: "Green Stay Sticker"
+      description: "Green Stay Sticker"
+      operationId: "getGreenStaySticker"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app
+        path_translation: APPEND_PATH_TO_ADDRESS
+      produces:
+      - "application/pdf"
+      parameters:
+      - name: "type"
+        in: "path"
+        description: "Type of widget"
+        type: "string"
+        required: true
+      - name: "code"
+        in: "path"
+        description: "Request code of widget"
+        type: "string"
+        required: true
+      responses:
+        "200":
+          description: "Successful operation"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+  /auth/login:
+    post:
+      tags:
+      - "v2"
+      operationId: "postAuthLogin"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/auth/login
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        required: true
+        schema: 
+          $ref: "#/definitions/TokenRequest"
+      responses:
+        "200":
+          description: "Successful operation"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/TokenResponse"
+  /auth/refresh:
+    post:
+      tags:
+      - "v2"
+      operationId: "postAuthRefresh"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/auth/refresh
+      consumes:
+      - "application/json"
+      produces:
+      - "application/json"
+      parameters:
+      - in: "body"
+        name: "body"
+        required: true
+        schema: 
+          $ref: "#/definitions/RefreshTokenRequest"
+      responses:
+        "200":
+          description: "Successful operation"
+          schema:
+            type: "array"
+            items:
+              $ref: "#/definitions/RefreshTokenResponse"
+  /v2/hotel-status:
+    get:
+      tags:
+      - "v1"
+      summary: ""
+      description: ""
+      operationId: "getHotelStatusV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/hotel-status
+      produces:
+      - "application/json"
+      parameters:
+      - name: "hkeys"
+        in: "query"
+        description: "Comma-separated list of hkeys"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/invitations/hotels:
+    get:
+      tags:
+      - "v1"
+      summary: "Pagination on Clean & Safe invitations"
+      description: "Paginated listing of Clean & Safe invitations"
+      operationId: "getHotelInvitationsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/invitations/hotels
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits:
+    get:
+      tags:
+      - "v2"
+      summary: ""
+      description: ""
+      operationId: "getAuditsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits
+      produces:
+      - "application/json"
+      parameters:
+      - name: "hkeys"
+        in: "query"
+        description: "Comma-separated list of hkeys"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits/report:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on Clean & Safe audits"
+      description: "Paginated listing of Clean & Safe audit reports"
+      operationId: "getAuditReportsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits/report
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits/report/touchlessstay:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on Touchless Stay audits"
+      description: "Paginated listing of Touchless Stay audit reports"
+      operationId: "getTouchlessStayReportsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits/report/touchlessstay
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits/report/green:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on Green Stay audits"
+      description: "Paginated listing of Green Stay audit reports"
+      operationId: "getGreenStayAuditReportsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits/report/green
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits/report/green_tracking:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on Green Stay tracking records"
+      description: "Paginated listing of Green Stay tracking records"
+      operationId: "getGreenStayTrackingReportsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits/report/green_tracking
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits/report/green_exceptions:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on Green Stay exception records"
+      description: "Paginated listing of Green Stay exception records"
+      operationId: "getGreenStayExceptionReportsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits/report/green_exceptions
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/audits/report/geosure:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on GeoSure audits"
+      description: "Paginated listing of GeoSure audit reports"
+      operationId: "getGeoSureAuditReportsV2"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/v1/audits/report/geosure
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "where"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+securityDefinitions:
+  v1_auth:
+    type: "apiKey"
+    name: "secretKey"
+    in: "query"
+  v2_auth_query:
+    type: "apiKey"
+    name: "token"
+    in: "query"
+  v2_auth_header:
+    type: "apiKey"
+    name: "x-access-token"
+    in: "header"
+definitions:
+  TokenRequest:
+    type: "object"
+    properties:
+      client_id:
+        type: "string"
+      client_secret:
+        type: "string"
+  TokenResponse:
+    type: "object"
+    properties:
+      status:
+        type: "string"
+        enum:
+        - "Logged in"
+      token:
+        type: "string"
+        description: "Access token (JWT)"
+      refreshToken:
+        type: "string"
+        description: "Refresh token (JWT)"
+  RefreshTokenRequest:
+    type: "object"
+    properties:
+      client_id:
+        type: "string"
+      client_secret:
+        type: "string"
+      refreshToken:
+        type: "string"
+        description: "Refresh token (JWT)"
+  RefreshTokenResponse:
+    type: "object"
+    properties:
+      token:
+        type: "string"
+        description: "Access token (JWT)"
