@@ -9,6 +9,18 @@ host: "api.hotel-audit.hrs.com"
 schemes:
 - "https"
 paths:
+  /docs:
+    get:
+      summary: ""
+      description: ""
+      operationId: "getSwaggerDoc"
+      x-google-backend:
+        address: https://hotel-audit-webservice-stage2-q3rx4x4ohq-ew.a.run.app/docs
+      produces:
+      - "text/html"
+      responses:
+        "200":
+          description: "Successful operation"
   /v1/hotel-status:
     get:
       tags:
