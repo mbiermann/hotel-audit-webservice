@@ -10,6 +10,8 @@ const storage = require('../service/storage')
 const ejs = require('ejs')
 const fs = require('fs')
 
+router.use('/audits', audits)
+
 router.get('/gs_cert/:code', (req, resp) => {
     if (!("code" in req.params)) return resp.sendStatus(403)
     let bytes = null

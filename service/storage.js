@@ -256,7 +256,7 @@ let evalGreenAuditRecord = (i) => {
             }
 
             let electricityFactor = factors.electricity[i.electricity_emission_location]
-            if (i.electricity_factor) {
+            if (i.electricity_factor !== null) {
                 electricityFactor = i.electricity_factor/1000
             }
             let kgCo2eElectrictiy = total_electricity_kwh * electricityFactor
