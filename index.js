@@ -15,7 +15,8 @@ const storage = require('./service/storage')
 const swaggerUi = require('swagger-ui-express')
 const YAML = require('yamljs')
 const swaggerDocument = YAML.load('./swagger.yaml')
-const {middleware: jwtAuth} = require('./utils/jwt-auth')
+const {middleware: jwtAuthMiddleware} = require('./utils/jwt-auth')
+const monitoring = require('./utils/monitoring')
 
 process.env.service_name = package.name
 
@@ -24,6 +25,8 @@ app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument /*, { explorer
 app.use(compression())
 app.use(bodyParser.json())
 app.use(cors())
+app.use(jwtAuthMiddleware)
+app.use(monitoring)
 
 app.use('/auth', auth)
 
@@ -32,7 +35,6 @@ app.use('/v2', v2)
 
 app.get('/favicon.ico', (req, res) => res.status(200))
 
-const request = require('request')
 
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log('Hotel Audit Webserive listening on port', port, 'in mode', process.env.MODE) );

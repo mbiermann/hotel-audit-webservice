@@ -11,6 +11,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@google-cloud/logging": "^8.0.5",
+    "@google-cloud/monitoring": "^2.3.1",
     "@google-cloud/storage": "^5.1.1",
     "adm-zip": "^0.4.16",
     "body-parser": "^1.19.0",
@@ -28,6 +29,7 @@
     "jsonwebtoken": "^8.5.1",
     "measurement-protocol": "^0.1.1",
     "mysql": "^2.16.0",
+    "nanoid": "^3.1.23",
     "node-xlsx": "^0.16.1",
     "promise.any": "^2.0.1",
     "redis": "^3.0.2",

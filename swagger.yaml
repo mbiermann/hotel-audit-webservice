@@ -38,6 +38,29 @@ paths:
           description: "Server error"
       security:
       - v1_auth: []
+  /v1/reports/hs-report:
+    get:
+      tags:
+      - "v1"
+      deprecated: true
+      summary: ""
+      description: ""
+      operationId: "getHotelReport"
+      x-google-backend:
+        address: https://hotel-audit-webservice-q3rx4x4ohq-ew.a.run.app/v1/reports/hs-report
+      produces:
+      - "application/octet-stream"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v1_auth: []
   /v1/invitations/hotels:
     get:
       tags:
