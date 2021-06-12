@@ -453,6 +453,14 @@ paths:
         description: "Comma-separated list of hkeys"
         required: true
         type: "string"
+      - name: "exclude"
+        in: "query"
+        description: "Comma-separated list of audit categories to be excluded from response. Audit categories are 'touchless','cleansafe','green' and 'geosure'."
+        type: "string"
+      - name: "include"
+        in: "query"
+        description: "Comma-separated list of audit categories to be included from response. Audit categories are 'touchless','cleansafe','green' and 'geosure'."
+        type: "string"
       responses:
         "200":
           description: "Successful operation"
