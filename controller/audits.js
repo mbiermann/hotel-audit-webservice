@@ -172,6 +172,11 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     if (!!req.query && !!req.query.hkeys) hkeys = req.query.hkeys.split(',')
     let exclude = []
     if (!!req.query && !!req.query.exclude) exclude = req.query.exclude.split(',')
+    let include = []
+    if (!!req.query && !!req.query.include) include = req.query.include.split(',')
+    if (include.length > 0) {
+        exclude = ['touchless','cleansafe','green','geosure'].filter(x => include.indexOf(x) === -1)
+    }
 
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
