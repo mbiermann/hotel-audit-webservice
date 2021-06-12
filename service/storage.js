@@ -296,9 +296,9 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
         thresholds = [benchmark[0].A, benchmark[0].B, benchmark[0].C]
     }
     let carbonClass = 'D'
-    for (let i = 0; i < thresholds.length; i++) {
-        if (i.kgCo2ePOC <= thresholds[i]) {
-            carbonClass = classes[i]
+    for (let j = 0; j < thresholds.length; j++) {
+        if (i.kgCo2ePOC <= thresholds[j]) {
+            carbonClass = classes[j]
             break
         }
     }
