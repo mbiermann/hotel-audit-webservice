@@ -5,6 +5,10 @@ const cloudStorage = require('../client/cloud-storage')
 const request = require('request')
 const flatten = require('flat')
 const logger = require('../utils/logger')
+const {GreenStayAuditRecord} = require('../model/green')
+
+
+const classes = ['A','B','C','D']
 
 let select = (fields, obj) => {
     return fields.reduce((o,k) => {o[k] = obj[k]; return o;}, {})
@@ -162,6 +166,19 @@ let getGreenhouseGasFactors = (i) => {
 
 }
 
+let evalGreenClaimRecord = async (i) => {
+    i.program = await getProgram(i.hkey)
+    i.cert = await getLastCertificate(i.hkey)
+    i.kgCo2ePOC = i.kgCo2ePor
+    i.lH2OPOC = i.lPor
+    i.kgWastePOC = i.kgWastePor
+    i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
+    i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
+    i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
+    i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
+    return new GreenStayAuditRecord(i)
+}
+
 let evalGreenAuditRecord = (i) => {
     return new Promise((resolve, reject) => {
 
@@ -207,25 +224,8 @@ let evalGreenAuditRecord = (i) => {
                 }
             }
 
-            let lH2OPOC = (shareRoomsToMeetingSpaces * consumedWater) / i.total_occupied_rooms
-            const h2OClasses = ['A','B','C','D']
-            let waterThresholds = [150,300,600,800] // Based on https://www.sciencedirect.com/science/article/abs/pii/S026151771400137X?via%3Dihub, https://www.mdpi.com/2071-1050/11/23/6880/pdf
-            let waterClass = 'D'
-            for (let i = 0; i < waterThresholds.length; i++) {
-                if (lH2OPOC <= waterThresholds[i]) {
-                    waterClass = h2OClasses[i]
-                    break
-                }
-            }
-
-            /*if (i.is_renewable_energy_used) {
-                if (i.total_renewable_energy_purchased_kwh > 0) {
-                    total_electricity_kwh -= i.total_renewable_energy_purchased_kwh
-                } 
-                if (i.total_renewable_energy_generated_kwh > 0) {
-                    total_electricity_kwh -= i.total_renewable_energy_generated_kwh
-                }
-            }*/
+            i.lH2OPOC = (shareRoomsToMeetingSpaces * consumedWater) / i.total_occupied_rooms
+            i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
 
             let totalKgCo2e = 0
 
@@ -244,16 +244,8 @@ let evalGreenAuditRecord = (i) => {
             }
 
             // Evaluate waste consumption (1cm contains approx. 125kg of landfill waste: https://www.wien.gv.at/umweltschutz/abfall/pdf/umrechnungsfaktoren.pdf)
-            let kgWastePOC = (shareRoomsToMeetingSpaces * (125*totalWaste)) / i.total_occupied_rooms
-            const wasteClasses = ['A','B','C','D']
-            let wasteThresholds = [0.3,0.6,1]
-            let wasteClass = 'D'
-            for (let i = 0; i < wasteThresholds.length; i++) {
-                if (kgWastePOC <= wasteThresholds[i]) {
-                    wasteClass = wasteClasses[i]
-                    break
-                }
-            }
+            i.kgWastePOC = (shareRoomsToMeetingSpaces * (125*totalWaste)) / i.total_occupied_rooms
+            i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
 
             let electricityFactor = factors.electricity[i.electricity_emission_location]
             if (i.electricity_factor !== null) {
@@ -264,55 +256,78 @@ let evalGreenAuditRecord = (i) => {
             let kgCo2eGas = total_gas_kwh * factors.mobile_fuels.gas
             totalKgCo2e += (kgCo2eElectrictiy + kgCo2eOil + kgCo2eGas)
 
-            let kgCo2ePOC = (shareRoomsToMeetingSpaces * totalKgCo2e) / i.total_occupied_rooms
-            
-            // Index values based on CHSB2020 M1 countries only LowerQ, Mean, UpperQ
-            const classes = ['A','B','C','D']
-            let thresholds = [19,31,38]
-            // Update default benchmark values with location-specific benchmark if exists
-            let benchmark = await db.select("green_benchmark", `WHERE location_id = '${i.electricity_emission_location}' AND reporting_year <= '${i.report_year}'`)
-            if (benchmark.length > 0) {
-                thresholds = [benchmark[0].A, benchmark[0].B, benchmark[0].C]
-            }
-            
-            let carbonClass = 'D'
-            for (let i = 0; i < thresholds.length; i++) {
-                if (kgCo2ePOC <= thresholds[i]) {
-                    carbonClass = classes[i]
-                    break
-                }
-            }
+            i.kgCo2ePOC = (shareRoomsToMeetingSpaces * totalKgCo2e) / i.total_occupied_rooms
+            i.carbonClass = await benchmarkCarbonEmission(i, i.electricity_emission_location)
 
-            let greenClassIdx = Math.round((classes.indexOf(carbonClass)+1)*0.6+(h2OClasses.indexOf(waterClass)+1)*0.2+(wasteClasses.indexOf(wasteClass)+1)*0.2)
-            let greenClass = classes[greenClassIdx-1]
+            i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
 
-            let program = await getProgram(i.hkey)
-            let cert = await getLastCertificate(i.hkey)
+            i.program = await getProgram(i.hkey)
+            i.cert = await getLastCertificate(i.hkey)
             
-            let rec = {}
-            rec.hkey = i.hkey
-            rec.id = i._id
-            rec.created_date = i._createdDate
-            rec.updated_date = i._updatedDate
-            rec.report_year = i.report_year
-            rec.kilogramCarbonPOC = kgCo2ePOC
-            rec.literWaterPOC = lH2OPOC
-            rec.kilogramWastePOC = kgWastePOC
-            rec.carbonClass = carbonClass
-            rec.waterClass = waterClass
-            rec.wasteClass = wasteClass
-            rec.greenClass = greenClass
-            if (program) rec.program = select(['name', 'link'], program)
-            if (cert) rec.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
-            rec.type = "green_stay_self_inspection"
-            if (greenClass === "A") rec.type = `${rec.type}_hero`
-            rec.status = true
-
+            let rec = new GreenStayAuditRecord(i)
             resolve(rec)
         })
         
     })
 } 
+
+let calculateGreenClass = (carbonClass, wasteClass, waterClass) => {
+    let greenClassIdx = Math.round((classes.indexOf(carbonClass)+1)*0.6+(classes.indexOf(waterClass)+1)*0.2+(classes.indexOf(wasteClass)+1)*0.2)
+    return classes[greenClassIdx-1]
+}
+
+let benchmarkCarbonEmission = async (i, emissionLocation) => {
+    // Index values based on CHSB2020 M1 countries only LowerQ, Mean, UpperQ
+    let thresholds = [19,31,38]
+    // Update default benchmark values with location-specific benchmark if exists
+    const cacheKey = `carbon_benchmark:${emissionLocation}:${i.report_year}`
+    let cacheProm = new Promise((resolve, reject) => {
+        cache.get(cacheKey, (err, benchmark) => {
+            if (err) reject(err)
+            resolve(benchmark)
+        })
+    })
+    let benchmark = await cacheProm
+    if (!benchmark) {
+        benchmark = await db.select("green_benchmark", `WHERE location_id = '${emissionLocation}' AND reporting_year <= '${i.report_year}'`)
+        cache.set(cacheKey, JSON.stringify(benchmark), 'EX', process.env.REDIS_TTL)
+    }
+    if (benchmark.length > 0) {
+        thresholds = [benchmark[0].A, benchmark[0].B, benchmark[0].C]
+    }
+    let carbonClass = 'D'
+    for (let i = 0; i < thresholds.length; i++) {
+        if (i.kgCo2ePOC <= thresholds[i]) {
+            carbonClass = classes[i]
+            break
+        }
+    }
+    return carbonClass
+}
+
+let benchmarkWaterConsumption = (lH2OPOC) => {
+    let waterThresholds = [150,300,600,800] // Based on https://www.sciencedirect.com/science/article/abs/pii/S026151771400137X?via%3Dihub, https://www.mdpi.com/2071-1050/11/23/6880/pdf
+    let waterClass = 'D'
+    for (let i = 0; i < waterThresholds.length; i++) {
+        if (lH2OPOC <= waterThresholds[i]) {
+            waterClass = classes[i]
+            break
+        }
+    }
+    return waterClass
+}
+
+let benchmarkWasteProduction = (kgWastePOC) => {
+    let wasteThresholds = [0.3,0.6,1]
+    let wasteClass = 'D'
+    for (let i = 0; i < wasteThresholds.length; i++) {
+        if (kgWastePOC <= wasteThresholds[i]) {
+            wasteClass = classes[i]
+            break
+        }
+    }
+    return wasteClass
+}
 
 let evalGreenExceptionRecord = (i) => {
     return new Promise(async (resolve, reject) => {
@@ -532,24 +547,36 @@ exports.getGreenAuditRecordsForHkeys = (hkeys, options) => {
             const hkeysFromCache = Object.keys(records).map(e => Number(e))
             let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
             if (leftHkeys.length === 0) return resolve(records)
+            
             let filter = `WHERE hkey IN (${leftHkeys})`
-            let greenAudits = await db.select("green_audits", filter)
+            
+            let greenClaims = await db.select("green_footprint_claims", filter)
             let evals = []
             let latestYears = {}
+            greenClaims.forEach(item => {
+                if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
+                    evals.push(evalGreenClaimRecord(item))
+                    latestYears[item.hkey] = item.report_year
+                }
+            })
+            
+            let greenAudits = await db.select("green_audits", filter)
+            latestYears = {}
             greenAudits.forEach(item => {
                 if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
                     evals.push(evalGreenAuditRecord(item))
                     latestYears[item.hkey] = item.report_year
                 }
             })
-            return Promise.all(evals).then(res => {
+
+            Promise.all(evals).then(res => {
                 res.forEach(e => {
                     cacheGreenAuditRecordForHkey(e.hkey, e)
                     records[e.hkey] = e
                 })
                 resolve(records)
             })
-            
+
         } catch (err) {
             reject(err)
         }
