@@ -647,8 +647,14 @@ exports.getGreenAuditForReportId = (id) => {
         try {
             let filter = `WHERE _id = '${id}'`
             db.select("green_audits", filter).then(res => {
-                if (res.length === 0) return reject(new Error(`No green report found for ID ${id}`))
-                resolve(evalGreenAuditRecord(res[0]))
+                if (res.length === 0) {
+                    db.select("green_footprint_claims", filter).then(res => {
+                        if (res.length === 0) return reject(new Error(`No green report found for ID ${id}`))
+                        resolve(evalGreenClaimRecord(res[0]))
+                    })
+                } else {
+                    resolve(evalGreenAuditRecord(res[0]))
+                }
             })
         } catch (err) {
             reject(err)
