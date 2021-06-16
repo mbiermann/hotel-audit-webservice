@@ -4,6 +4,7 @@ const router = express.Router()
 const storage = require('../service/storage')
 const SHA256 = require("crypto-js/sha256")
 const {combinedAuthMiddleware: combinedAuthMiddleware} = require('.././utils/auth-middleware')
+const {unblock} = require('.././utils/blocked-middleware')
 
 
 router.post('/login', async (req, res) => {
@@ -18,7 +19,9 @@ router.post('/login', async (req, res) => {
             "token": token,
             "refreshToken": refreshToken,
         }
-        res.status(200).json(response);
+        unblock(req, () => {
+            res.status(200).json(response)
+        })
     } catch (e) {
         console.log("Error in /auth/login", e)
         res.status(401).json({
@@ -42,7 +45,6 @@ router.post('/refresh', async (req,res) => {
         const client = { "client_id": auth.id, "grants": auth.grants }
         const token = jwt.sign(client, process.env.JWT_TOKEN_SECRET, { expiresIn: auth.access_token_ttl})
         const response = { "token": token }
-        res.status(200).json(response)
     } catch (e) {
         console.log("Error in /auth/refresh", e)
         return res.status(401).json({

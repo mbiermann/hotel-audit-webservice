@@ -34,7 +34,17 @@ let block = (req, handler) => {
     })
 }
 
+let unblock = (req, handler) => {
+    let ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress
+    ip = ip.split(",")[0]
+    cache.del(`block:${req.headers.host}:${ip}`, (err) => {
+        trackEvent('Audit Web Service', 'Unblocked IP', {ip: ip})
+        handler()
+    })
+}
+
 module.exports = {
     middleware: middleware,
-    block: block
+    block: block,
+    unblock: unblock
 }

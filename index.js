@@ -20,17 +20,16 @@ const monitoring = require('./utils/monitoring')
 
 process.env.service_name = package.name
 
-app.use(blocker.middleware)
 app.use('/docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument /*, { explorer: true }*/))
 app.use(compression())
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(cors())
-app.use(jwtAuthMiddleware)
 app.use(monitoring)
 
 app.use('/auth', auth)
-
+app.use(jwtAuthMiddleware)
+app.use(blocker.middleware)
 app.use('/v1', v1)
 app.use('/v2', v2)
 
