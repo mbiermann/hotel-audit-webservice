@@ -45,6 +45,7 @@ router.post('/refresh', async (req,res) => {
         const client = { "client_id": auth.id, "grants": auth.grants }
         const token = jwt.sign(client, process.env.JWT_TOKEN_SECRET, { expiresIn: auth.access_token_ttl})
         const response = { "token": token }
+        res.status(200).json(response)
     } catch (e) {
         console.log("Error in /auth/refresh", e)
         return res.status(401).json({
