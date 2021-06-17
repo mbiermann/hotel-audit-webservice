@@ -56,8 +56,12 @@ router.post('/refresh', async (req,res) => {
     
 })
 
-router.get('/jwt-test', combinedAuthMiddleware, (req, res) => {
-    res.status(200).json(req.auth)
+router.get('/jwt-test', (req, res) => {
+    if (req.auth) {
+         res.status(200).json(req.auth)
+    } else {
+        res.status(401)
+    }
 })
 
 module.exports = router;
