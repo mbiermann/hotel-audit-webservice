@@ -4,7 +4,7 @@ const {nanoid} = require('nanoid')
 
 
 const middleware = (req, res, next) => {
-    let prom = new Promise(async (resolve, reject) => {
+   /* let prom = new Promise(async (resolve, reject) => {
         const client = new monitoring.MetricServiceClient();
 
         const dataPoint = {
@@ -47,7 +47,7 @@ const middleware = (req, res, next) => {
     
     if (!req.monitoringProms) req.monitoringProms = []
     req.monitoringProms.push(prom)
-
+    */
     next()
 }
 

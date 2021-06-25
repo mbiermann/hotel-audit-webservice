@@ -167,6 +167,7 @@ router.get('/report/geosure', combinedAuthMiddleware, async (req, resp) => {
 router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
     let startDate = new Date()
+    let checkinDate = new Date()
     
     let hkeys = []
     if (!!req.query && !!req.query.hkeys) hkeys = req.query.hkeys.split(',')
@@ -175,7 +176,15 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     let include = []
     if (!!req.query && !!req.query.include) include = req.query.include.split(',')
     if (include.length > 0) {
-        exclude = ['touchless','cleansafe','green','geosure'].filter(x => include.indexOf(x) === -1)
+        exclude = ['touchless','cleansafe','green','geosure','checkin'].filter(x => include.indexOf(x) === -1)
+    }
+
+    if (!!req.query && !!req.query.checkin_date) {
+        if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.checkin_date))) {
+            return resp.status(403).send({ message: 'Invalid use of parameter ´checkin_date´!' })
+        } else {
+            checkinDate = new Date(Date.parse(req.query.checkin_date))
+        }
     }
 
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
@@ -183,13 +192,15 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys)
     let green_exceptions = (exclude.includes('green')) ? null : storage.getGreenExceptionRecordsForHkeys(hkeys)
     let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
+    let checkin = (exclude.includes('checkin')) ? null : storage.getCheckinConfigsForHkeys(hkeys, checkinDate)
 
-    Promise.all([touchless, cleansafe, green, green_exceptions, geosure]).then(async (result) => {
+    Promise.all([touchless, cleansafe, green, green_exceptions, geosure, checkin]).then(async (result) => {
         let _touchless = result[0]
         let _cleansafe = result[1]
         let _green = result[2]
         let _green_exceptions = result[3]
         let _geosure = result[4]
+        let _checkin = result[5]
 
         let data = {}
         let csTouchlessCheckin = new Set()
@@ -245,6 +256,14 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                     data[hkey].push(_geosure[hkey])
                 }
             }
+            if (!(exclude.includes('checkin'))) {
+                if (hkey in _checkin) {
+                    if (!(hkey in data)) data[hkey] = []
+                    delete _checkin[hkey].hkey
+                    _checkin[hkey].checkin_date_ref = checkinDate
+                    data[hkey].push(_checkin[hkey])
+                }
+            }
         }
 
         trackEvent('Audit Web Service', 'Audits Request Success', req.query.hkeys)
@@ -258,6 +277,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
         await auditFetchLog.write(entry)
         resp.status(200).json(data)
     }).catch((err) => {
+        console.log("Error on /audits:", err)
         trackEvent('Audit Web Service', 'Audits Request Failure', req.query.hkeys)
         logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
         resp.status(500).json({ error: 'Server Error' })

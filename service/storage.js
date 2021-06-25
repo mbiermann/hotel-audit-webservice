@@ -284,7 +284,7 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
     let cacheProm = new Promise((resolve, reject) => {
         cache.get(cacheKey, (err, benchmark) => {
             if (err) reject(err)
-            resolve(benchmark)
+            resolve(JSON.parse(benchmark))
         })
     })
     let benchmark = await cacheProm
@@ -302,6 +302,7 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
             break
         }
     }
+    console.log(carbonClass)
     return carbonClass
 }
 
@@ -939,5 +940,85 @@ exports.getChainSampleHotels = (id) => {
             })
             Promise.all(proms).then(resolve).catch(reject)
         })
+    })
+}
+
+const evalCheckinConfig = (data) => {
+    data.business_requirements = JSON.parse(data.business_requirements)
+    data.leisure_requirements = JSON.parse(data.leisure_requirements)
+    const today = new Date()
+    data.status = data.start_date > today ? 'inactive' : (data.end_date >= today ? 'active' : 'expired')
+    data.type = "checkin_config"
+    for (let [k,v] of Object.entries(data)) if (!v) delete data[k]
+    return data
+}
+
+exports.getCheckinConfigByID = (id) => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT * FROM cs_checkin_config WHERE _id = "${id}"`, [], (res) => {
+            if (res.length === 0) resolve(null)
+            resolve(evalCheckinConfig(res[0]))
+        })
+    })
+}
+
+const formatDate = (date) => `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}-${String(date.getDate()).padStart(2,'0')}`
+
+const cacheCheckinConfigForHkey = (hkey, checkin_date_ref, elem) => {
+    cache.set(`checkin:${formatDate(checkin_date_ref)}:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL)
+}
+
+const getCachedCheckinConfigsForHkeys = (hkeys, checkin_date_ref) => {
+    return new Promise((resolve) => {
+        let data = {}
+        let proms = hkeys.map((hkey) => new Promise((resolve, reject) => {
+            cache.get(`checkin:${formatDate(checkin_date_ref)}:${hkey}`, (err, val) => {
+                if (val !== null) data[hkey] = JSON.parse(val)
+                resolve()
+            })
+        }))
+        Promise.all(proms).then(_ => {
+            resolve(data)
+        })
+    })   
+}
+
+const getCheckinConfigsForHkeysFromDB = (hkeys, checkin_date_ref) => {
+    const dateRef = formatDate(checkin_date_ref)
+    return new Promise((resolve, reject) => {
+        const list = hkeys.map(val => db.escape(val)).join(', ')
+        let res = db.query(`SELECT * FROM cs_checkin_config WHERE hkey IN (${list}) AND DATE('${dateRef}') >= start_date AND end_date >= DATE('${dateRef}')`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+
+exports.getCheckinConfigsForHkeys = (hkeys, checkin_date_ref) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            let res = {}
+            hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
+            if (hkeys.length === 0) return resolve([])
+            res = await getCachedCheckinConfigsForHkeys(hkeys, checkin_date_ref)
+            for (let hkey of Object.keys(res)) {
+                hkeys.splice(hkeys.indexOf(Number(hkey)), 1)
+            }
+            if (hkeys.length === 0) return resolve(res)
+            let items = await getCheckinConfigsForHkeysFromDB(hkeys, checkin_date_ref)
+            let proms = []
+            for (let i of items) {
+                proms.push(new Promise((rslv, rjt) => {
+                    let elem = evalCheckinConfig(i)
+                    cacheCheckinConfigForHkey(i.hkey, checkin_date_ref, elem)
+                    res[i.hkey] = elem
+                    hkeys.splice(hkeys.indexOf(Number(i.hkey)), 1)
+                    rslv()
+                }))
+            }
+            await Promise.all(proms)
+            resolve(res)
+        } catch (err) {
+            reject(err)
+        }
     })
 }

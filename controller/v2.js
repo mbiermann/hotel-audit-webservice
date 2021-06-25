@@ -2,6 +2,7 @@ const express = require('express')
 const router = express.Router()
 const report = require('./reports')
 const audits = require('./audits')
+const check_ins = require('./check-ins')
 const CryptoJS = require('crypto-js')
 const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
@@ -11,6 +12,7 @@ const ejs = require('ejs')
 const fs = require('fs')
 
 router.use('/audits', audits)
+router.use('/check-ins', check_ins)
 
 router.get('/gs_cert/:code', (req, resp) => {
     if (!("code" in req.params)) return resp.sendStatus(403)
@@ -29,9 +31,9 @@ router.get('/gs_cert/:code', (req, resp) => {
         let address = hotel.city + ", " + hotel.country
         let id = res.id
         let year = res.report_year
-        let kgCO2ePOC = Math.round(res.kilogramCarbonPOC)
+        let kgCO2ePOC = Math.round(res.kilogramCarbonPOC*100)/100
         let lWaterPOC = Math.round(res.literWaterPOC)
-        let kgWastePOC = Math.round(res.kilogramWastePOC*100)/100
+        let kgWastePOC = Math.round(res.kilogramWastePOC*1000)/1000
         const data = {name:name, address:address, id:id, year:year, kgCO2ePOC: kgCO2ePOC, lWaterPOC: lWaterPOC, kgWastePOC:kgWastePOC}
         const template = (res.greenClass === "A") ? "/gs_award.html" : "/gs_cert.html"
         ejs.renderFile(process.cwd() + template, data, {}, function(err, str){

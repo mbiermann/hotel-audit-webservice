@@ -455,11 +455,11 @@ paths:
         type: "string"
       - name: "exclude"
         in: "query"
-        description: "Comma-separated list of audit categories to be excluded from response. Audit categories are 'touchless','cleansafe','green' and 'geosure'."
+        description: "Comma-separated list of audit categories to be excluded from response. Audit categories are 'touchless','cleansafe','green', 'geosure' and 'checkin'."
         type: "string"
       - name: "include"
         in: "query"
-        description: "Comma-separated list of audit categories to be included from response. Audit categories are 'touchless','cleansafe','green' and 'geosure'."
+        description: "Comma-separated list of audit categories to be included from response. Audit categories are 'touchless','cleansafe','green', 'geosure' and 'checkin'."
         type: "string"
       responses:
         "200":
@@ -736,6 +736,33 @@ paths:
         in: "query"
         description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
         type: "string"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/check-ins/{id}:
+    get:
+      tags:
+      - "v2"
+      summary: "Clean & Safe Check-in Configuration"
+      description: "Clean & Safe Check-in Configuration"
+      operationId: "getCheckin"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "id"
+        in: "path"
+        description: "Check-in Configuration ID"
+        type: "string"
+        required: true
       responses:
         "200":
           description: "Successful operation"
