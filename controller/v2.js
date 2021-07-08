@@ -14,6 +14,39 @@ const fs = require('fs')
 router.use('/audits', audits)
 router.use('/check-ins', check_ins)
 
+router.get('/hotel-status', combinedAuthMiddleware, (req, resp) => {
+    if (!req.query || !req.query.hkeys) return resp.status(500).json({ error: 'Missing hkeys' })
+    const hkeys = req.query.hkeys.split(',').map((val) => Number(val))
+    
+    storage.getHotelStatusByHkeys(hkeys, {green: true, clean: true} ,false, true).then(statuses => {
+        resp.send(statuses)
+    }).catch((err) => {
+        console.log(err)
+        logger.logEvent(logger.EventServiceResponse, {"url": req.originalUrl, "status": 500, "error": "Server Error"})
+        resp.status(500).json({ error: 'Server Error' })
+    })
+    
+})
+
+router.get('/invitations/hotels', combinedAuthMiddleware, (req, resp) => {
+    if (!!req.query && !!req.query.page && !!req.query.size) {
+        let page = Number(req.query.page)
+        if (isNaN(page) || page === 0) page = 1
+        let size = Number(req.query.size)
+        if (isNaN(size)) size = 10
+        if (size > 500) size = 500
+        let offset = (page > 1 ? (page - 1) * size : 0)
+        storage.getInvitations(offset, size).then(res => {
+            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
+        }).catch(err => {
+            trackEvent('Audit Web Service', 'Get Hotel Invitations Failure')
+            return resp.sendStatus(500)
+        })     
+    } else {
+        resp.sendStatus(403)
+    }
+})
+
 router.get('/gs_cert/:code', (req, resp) => {
     if (!("code" in req.params)) return resp.sendStatus(403)
     let bytes = null
@@ -82,7 +115,7 @@ router.get('/gs_widget_link/:type/:code', (req, resp) => {
     if (dec.length === 0) return resp.sendStatus(403)
     storage.getGreenAuditForReportId(dec).then(async res => {
         let type = 'basic'
-        resp.redirect(`https://hotel-audit.hrs.com/clean-and-safe?utm_source=hotel_om&utm_medium=gs_hotel_${type}_widget_${req.params.type}&utm_campaign=greenstay&utm_content=${res.hkey}`)
+        resp.redirect(`https://www.hrs.com/enterprise/en/integrations/green-stay?utm_source=hotel_om&utm_medium=gs_hotel_${type}_widget_${req.params.type}&utm_campaign=greenstay&utm_content=${res.hkey}`)
     }).catch(err => {
         trackEvent('Audit Web Service', 'Green Stay Widget Link Request Failure', 'audit_id::'+dec)
         return resp.sendStatus(500)

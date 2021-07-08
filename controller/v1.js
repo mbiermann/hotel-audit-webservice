@@ -27,25 +27,6 @@ router.get('/hotel-status', combinedAuthMiddleware, (req, resp) => {
     
 })
 
-router.get('/invitations/hotels', combinedAuthMiddleware, (req, resp) => {
-    if (!!req.query && !!req.query.page && !!req.query.size) {
-        let page = Number(req.query.page)
-        if (isNaN(page) || page === 0) page = 1
-        let size = Number(req.query.size)
-        if (isNaN(size)) size = 10
-        if (size > 500) size = 500
-        let offset = (page > 1 ? (page - 1) * size : 0)
-        storage.getInvitations(offset, size).then(res => {
-            resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
-        }).catch(err => {
-            trackEvent('Audit Web Service', 'Get Hotel Invitations Failure')
-            return resp.sendStatus(500)
-        })     
-    } else {
-        resp.sendStatus(403)
-    }
-})
-
 /**
  * Gets sample set of hotels representing top portfolio regions for use by Hotel Audit Portal 
  * in auditing a chain's internal emission factors to comply with Green Stay database.

@@ -302,7 +302,6 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
             break
         }
     }
-    console.log(carbonClass)
     return carbonClass
 }
 
@@ -1020,5 +1019,31 @@ exports.getCheckinConfigsForHkeys = (hkeys, checkin_date_ref) => {
         } catch (err) {
             reject(err)
         }
+    })
+}
+
+exports.getCachedClientSettings = (clientID) => {
+    //console.log("getCachedClientSettings", clientID)
+    return new Promise((resolve) => {
+        return cache.get(`rate-limit-client:${clientID}`, (err, val) => {
+            //console.log(`rate-limit-client:${clientID}`, val)
+            if (val !== null) resolve(JSON.parse(val))
+            resolve(null)
+        })
+    })   
+}
+
+exports.cacheClientSettings = (clientID, settings) => {
+    //console.log(`cacheClientSettings`, settings)
+    cache.set(`rate-limit-client:${clientID}`, JSON.stringify(settings), 'EX', process.env.REDIS_TTL)
+}
+
+exports.getClientSettingsFromDB = (clientID) => {
+    //console.log(`getClientSettingsFromDB`, clientID)
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT * FROM api_clients WHERE id = '${clientID}' LIMIT 1`, [], (res) => {
+            //console.log(`SELECT * FROM api_clients WHERE id = '${clientID}' LIMIT 1`, res)
+            resolve(res[0])
+        })
     })
 }

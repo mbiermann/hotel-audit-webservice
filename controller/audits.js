@@ -10,6 +10,7 @@ const Excel = require('exceljs')
 const { writeToString } = require('@fast-csv/format')
 const flatten = require('flat')
 const xlsx = require('node-xlsx')
+const CryptoJS = require('crypto-js')
 
 let projectId = process.env.GC_PROJECT_ID
 const logging = new Logging({ projectId });
@@ -310,8 +311,19 @@ router.get('/green/reports/hotel/:hkey', combinedAuthMiddleware, async (req, res
     })
 })
 
-router.get('/green/reports/group/:id', combinedAuthMiddleware, async (req, resp) => {
-    storage.getHotelsByChainId(req.params.id).then(hotels => {
+router.get('/green/reports/group/:code', async (req, resp) => {
+    if (!("code" in req.params)) return resp.sendStatus(403)
+    let bytes = null
+    let dec = null
+    try {
+        bytes = CryptoJS.AES.decrypt(CryptoJS.enc.Hex.parse(req.params.code).toString(CryptoJS.enc.Base64), process.env.CERT_PASS)
+        dec = bytes.toString(CryptoJS.enc.Utf8)
+    } catch (err) {
+        return resp.sendStatus(403)
+    }
+    if (dec.length === 0) return resp.sendStatus(403)
+    let codeData = JSON.parse(dec)
+    storage.getHotelsByChainId(codeData.id).then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
         storage.getGreenAuditRecordsForHkeys(hkeys).then(res => {
             let headers = []
@@ -335,10 +347,10 @@ router.get('/green/reports/group/:id', combinedAuthMiddleware, async (req, resp)
             })   
             var buffer = xlsx.build([{name: "report", data: out}])
             resp.set('Content-Type', 'application/octet-stream')
-            resp.attachment(`Green Stay - Hotel Group Status Report - ${req.params.id}.xlsx`)
+            resp.attachment(`Green Stay - Hotel Group Status Report - ${codeData.id}.xlsx`)
             resp.status(200).send(buffer)
         }).catch(err => {
-            trackEvent('Audit Web Service', 'Green Audit Group Report Failure', req.params.id)
+            trackEvent('Audit Web Service', 'Green Audit Group Report Failure', codeData.id)
             logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
             resp.status(500).json({ error: 'Server Error' })
         })
