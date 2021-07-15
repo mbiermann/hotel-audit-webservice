@@ -179,6 +179,28 @@ let evalGreenClaimRecord = async (i) => {
     return new GreenStayAuditRecord(i)
 }
 
+const ANOMALIES = {
+    AVG_ROOMSIZE_TOO_SMALL: "AVG_ROOMSIZE_TOO_SMALL",
+    ELECTRICITY_FACTOR_TOO_HIGH: "ELECTRICITY_FACTOR_TOO_HIGH",
+    ELECTRICITY_FACTOR_TOO_LOW: "ELECTRICITY_FACTOR_TOO_LOW",
+    DISTRICT_HEATING_FACTOR_TOO_HIGH: "DISTRICT_HEATING_FACTOR_TOO_HIGH",
+    DISTRICT_HEATING_TOO_LOW: "DISTRICT_HEATING_TOO_LOW",
+    LANDFILL_WASTE_TOO_HIGH: "LANDFILL_WASTE_TOO_HIGH",
+    LANDFILL_WASTE_TOO_LOW: "LANDFILL_WASTE_TOO_LOW",
+    PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
+    TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
+    NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW"
+}
+
+const _addAnomaly = (item, anomalyType, metric, value) => {
+    if (!item.anomalies) item.anomalies = []
+    item.anomalies.push({
+        type: anomalyType,
+        metric: metric,
+        value: value
+    })
+}
+
 let evalGreenAuditRecord = (i) => {
     return new Promise((resolve, reject) => {
 
@@ -190,12 +212,25 @@ let evalGreenAuditRecord = (i) => {
 
             let shareRoomsToMeetingSpaces = i.total_guest_room_corridor_area_sqm / (i.total_guest_room_corridor_area_sqm + i.total_meeting_space_sqm)
 
+            if (i.total_guest_room_corridor_area_sqm/i.total_guest_rooms < 10) {
+                _addAnomaly(i, ANOMALIES.AVG_ROOMSIZE_TOO_SMALL, "Total guest room and corridor area (sqm) / Total guest rooms", i.total_guest_room_corridor_area_sqm/i.total_guest_rooms)
+            }
+
             // Evaluate water consumption
             let consumedWater = i.total_metered_water + i.total_unmetered_water - i.total_sidebar_water - i.onsite_waste_water_treatment
+            if ((i.total_metered_water + i.total_unmetered_water) <= 0) {
+                _addAnomaly(i, ANOMALIES.TOTAL_WATER_TOO_LOW, "Total metered and unmetered water (liters)", (i.total_metered_water + i.total_unmetered_water))
+            }
             let totalWaste = i.landfill_waste_cm
+            if (i.landfill_waste_cm <= 0) {
+                _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
+            }
 
             if (i.is_privatespace_available) {
-                let privateSpaceShare = i.total_privatespace_sqm / i.total_conditioned_area_sqm
+                let privateSpaceShare = (i.total_conditioned_area_sqm > 0) ? i.total_privatespace_sqm / i.total_conditioned_area_sqm : 0
+                if (privateSpaceShare >= 1) {
+                    _addAnomaly(i, ANOMALIES.PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND, "Total private conditioned space (sqm) / Total conditioned area (sqm)", privateSpaceShare)
+                }
                 if (i.privatespace_total_electricity_kwh > 0 || i.privatespace_total_oil_litres > 0 || i.privatespace_total_gas_kwh > 0) {
                     total_electricity_kwh -= i.privatespace_total_electricity_kwh
                     total_oil_litres -= i.privatespace_total_oil_litres
@@ -225,6 +260,9 @@ let evalGreenAuditRecord = (i) => {
             }
 
             i.lH2OPOC = (shareRoomsToMeetingSpaces * consumedWater) / i.total_occupied_rooms
+            if (i.lH2OPOC < 10) {
+                _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
+            }
             i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
 
             let totalKgCo2e = 0
@@ -241,16 +279,30 @@ let evalGreenAuditRecord = (i) => {
 
             if (i.total_district_heating > 0 && i.district_heating_factor) {
                 totalKgCo2e += (i.total_district_heating * (i.district_heating_factor/1000))
+                if (i.district_heating_factor > 3000) {
+                    _addAnomaly(i, ANOMALIES.DISTRICT_HEATING_FACTOR_TOO_HIGH, "District heating emission factor (g/kWh)", i.district_heating_factor)
+                } else if (i.district_heating_factor < 0) {
+                    _addAnomaly(i, ANOMALIES.DISTRICT_HEATING_TOO_LOW, "District heating factor (g/kWh)", i.district_heating_factor)
+                }
             }
 
             // Evaluate waste consumption (1cm contains approx. 125kg of landfill waste: https://www.wien.gv.at/umweltschutz/abfall/pdf/umrechnungsfaktoren.pdf)
             i.kgWastePOC = (shareRoomsToMeetingSpaces * (125*totalWaste)) / i.total_occupied_rooms
+            if (i.kgWastePOC > 10) {
+                _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_HIGH, "Waste per occupied room", i.kgWastePOC)
+            }
             i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
 
             let electricityFactor = factors.electricity[i.electricity_emission_location]
             if (i.electricity_factor !== null) {
+                if (i.electricity_factor > 3000) {
+                    _addAnomaly(i, ANOMALIES.ELECTRICITY_FACTOR_TOO_HIGH, "Electricity emission factor (g/kWh)", i.electricity_factor)
+                } else if (i.electricity_factor < 0) {
+                    _addAnomaly(i, ANOMALIES.ELECTRICITY_FACTOR_TOO_LOW, "Electricity emission factor (g/kWh)", i.electricity_factor)
+                }
                 electricityFactor = i.electricity_factor/1000
             }
+
             let kgCo2eElectrictiy = total_electricity_kwh * electricityFactor
             let kgCo2eOil = total_oil_litres * factors.mobile_fuels.diesel
             let kgCo2eGas = total_gas_kwh * factors.mobile_fuels.gas
@@ -1044,6 +1096,14 @@ exports.getClientSettingsFromDB = (clientID) => {
         return db.query(`SELECT * FROM api_clients WHERE id = '${clientID}' LIMIT 1`, [], (res) => {
             //console.log(`SELECT * FROM api_clients WHERE id = '${clientID}' LIMIT 1`, res)
             resolve(res[0])
+        })
+    })
+}
+
+exports.getHotelsWithGreenAudit = () => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT DISTINCT hkey FROM green_audits`, [], (res) => {
+            resolve(res)
         })
     })
 }
