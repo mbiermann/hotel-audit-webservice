@@ -221,9 +221,13 @@ let evalGreenAuditRecord = (i) => {
             if ((i.total_metered_water + i.total_unmetered_water) <= 0) {
                 _addAnomaly(i, ANOMALIES.TOTAL_WATER_TOO_LOW, "Total metered and unmetered water (liters)", (i.total_metered_water + i.total_unmetered_water))
             }
-            let totalWaste = i.landfill_waste_cm
-            if (i.landfill_waste_cm < 0) {
-                _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
+
+            let totalWaste = 0
+            if (!i.no_waste_data_available) {
+                totalWaste = i.landfill_waste_cm
+                if (i.landfill_waste_cm < 0) {
+                    _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
+                }
             }
 
             if (i.is_privatespace_available) {
@@ -242,7 +246,7 @@ let evalGreenAuditRecord = (i) => {
                     total_gas_kwh -= total_gas_kwh * privateSpaceShare
                     consumedWater -= consumedWater * privateSpaceShare
                 }
-                totalWaste -= totalWaste * privateSpaceShare // Always, as we don't request specific figures
+                if (!i.no_waste_data_available) totalWaste -= totalWaste * privateSpaceShare // Approximate, as we don't request specific figures
             }
 
             if (i.is_laundry_outsourced) {
@@ -285,13 +289,19 @@ let evalGreenAuditRecord = (i) => {
                     _addAnomaly(i, ANOMALIES.DISTRICT_HEATING_TOO_LOW, "District heating factor (g/kWh)", i.district_heating_factor)
                 }
             }
-
-            // Evaluate waste consumption (1cm contains approx. 125kg of landfill waste: https://www.wien.gv.at/umweltschutz/abfall/pdf/umrechnungsfaktoren.pdf)
-            i.kgWastePOC = (shareRoomsToMeetingSpaces * (125*totalWaste)) / i.total_occupied_rooms
-            if (i.kgWastePOC > 10) {
-                _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_HIGH, "Waste per occupied room", i.kgWastePOC)
+            
+            // When waste data is absent, set KPI negative and grant the worst class
+            if (i.no_waste_data_available) {
+                i.kgWastePOC = -1
+                i.wasteClass = 'D'
+            } else {
+                // Evaluate waste consumption (1cm contains approx. 125kg of landfill waste: https://www.wien.gv.at/umweltschutz/abfall/pdf/umrechnungsfaktoren.pdf)
+                i.kgWastePOC = (shareRoomsToMeetingSpaces * (125*totalWaste)) / i.total_occupied_rooms
+                if (i.kgWastePOC > 10) {
+                    _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_HIGH, "Waste per occupied room", i.kgWastePOC)
+                }
+                i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
             }
-            i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
 
             let electricityFactor = factors.electricity[i.electricity_emission_location]
             if (i.electricity_factor !== null) {

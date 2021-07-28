@@ -66,7 +66,7 @@ router.get('/gs_cert/:code', (req, resp) => {
         let year = res.report_year
         let kgCO2ePOC = Math.round(res.kilogramCarbonPOC*100)/100
         let lWaterPOC = Math.round(res.literWaterPOC)
-        let kgWastePOC = Math.round(res.kilogramWastePOC*1000)/1000
+        let kgWastePOC = (res.kilogramWastePOC === -1) ? "N/A" : Math.round(res.kilogramWastePOC*1000)/1000
         const data = {name:name, address:address, id:id, year:year, kgCO2ePOC: kgCO2ePOC, lWaterPOC: lWaterPOC, kgWastePOC:kgWastePOC}
         const template = (res.greenClass === "A") ? "/gs_award.html" : "/gs_cert.html"
         ejs.renderFile(process.cwd() + template, data, {}, function(err, str){
