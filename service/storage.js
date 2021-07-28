@@ -222,7 +222,7 @@ let evalGreenAuditRecord = (i) => {
                 _addAnomaly(i, ANOMALIES.TOTAL_WATER_TOO_LOW, "Total metered and unmetered water (liters)", (i.total_metered_water + i.total_unmetered_water))
             }
             let totalWaste = i.landfill_waste_cm
-            if (i.landfill_waste_cm <= 0) {
+            if (i.landfill_waste_cm < 0) {
                 _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
             }
 
@@ -1102,7 +1102,7 @@ exports.getClientSettingsFromDB = (clientID) => {
 
 exports.getHotelsWithGreenAudit = () => {
     return new Promise((resolve, reject) => {
-        return db.query(`SELECT DISTINCT A.hkey, B.chain_id, B.hrs_office FROM green_audits A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_audits A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })
