@@ -171,10 +171,16 @@ let evalGreenClaimRecord = async (i) => {
     i.cert = await getLastCertificate(i.hkey)
     i.kgCo2ePOC = i.kgCo2ePor
     i.lH2OPOC = i.lPor
-    i.kgWastePOC = i.kgWastePor
     i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
-    i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
+    if (!i.no_waste_data_available) {
+        i.kgWastePOC = i.kgWastePor
+        i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
+    // When waste data is absent, set KPI negative and grant the worst class
+    } else {
+        i.kgWastePOC = -1
+        i.wasteClass = 'D'
+    }
     i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
     return new GreenStayAuditRecord(i)
 }
