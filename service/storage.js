@@ -993,6 +993,17 @@ exports.getHotelsByChainId = (id) => {
     })
 }
 
+exports.getHotelsByAgentId = (id) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT hkey FROM agents_hotels WHERE agent_id = '${id}'`, [], (res) => {
+            if (res.length === 0) return resolve([])
+            db.query(`SELECT hkey, name, brand, city, country FROM hotels_view WHERE hkey IN (${res.map(x => x.hkey).join(',')}) ORDER BY hkey ASC`, [], (res) => {
+                resolve(res)
+            })
+        })
+    })
+}
+
 exports.getChainSampleHotels = (id) => {
     return new Promise((resolve, reject) => {
         return db.query(`SELECT country_id, count(*) as cnt FROM hotels WHERE chain_id = ${id} and country_id <> -1 GROUP BY country_id ORDER BY cnt DESC LIMIT 10`, [], (res) => {
@@ -1119,6 +1130,14 @@ exports.getClientSettingsFromDB = (clientID) => {
 exports.getHotelsWithGreenAudit = () => {
     return new Promise((resolve, reject) => {
         return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_audits A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+
+exports.getHotelsWithGreenClaim = () => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_footprint_claims A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })

@@ -287,7 +287,13 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 })
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
-    storage.getHotelsWithGreenAudit().then(hotels => {
+    let proms = []
+    proms.push(storage.getHotelsWithGreenClaim())
+    proms.push(storage.getHotelsWithGreenAudit())
+    let hotels = []
+    Promise.all(proms).then(res => {
+        hotels.push(...res[0], ...res[1])
+        console.log(hotels)
         const hkeys = hotels.map(x => x.hkey)
         storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true}).then(res => {
             let headers = []
@@ -358,7 +364,8 @@ router.get('/green/reports/group/:code', async (req, resp) => {
     }
     if (dec.length === 0) return resp.sendStatus(403)
     let codeData = JSON.parse(dec)
-    storage.getHotelsByChainId(codeData.id).then(hotels => {
+    let fun = codeData.type === "AGENT" ? storage.getHotelsByAgentId : storage.getHotelsByChainId
+    fun(codeData.id).then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
         storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true}).then(res => {
             let headers = []
