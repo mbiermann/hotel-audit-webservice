@@ -606,7 +606,21 @@ exports.getTouchlessStatusForHkeys = (hkeys) => {
     })
 }
 
-exports.getGreenAuditRecordsForHkeys = (hkeys, options) => {
+exports.getAllHotelsWithGreenRecord = () => {
+    return new Promise((resolve, reject) => {
+        let proms = []
+        proms.push(getHotelsWithGreenClaim())
+        proms.push(getHotelsWithGreenAudit())
+        proms.push(getHotelsWithGreenException())
+        let hotels = []
+        Promise.all(proms).then(res => {
+            hotels.push(...res[0], ...res[1], ...res[2])
+            resolve(hotels)
+        })
+    })
+}
+
+let getGreenAuditRecordsForHkeys = (hkeys, options) => {
     return new Promise(async (resolve, reject) => {
         try {
             hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
@@ -637,6 +651,15 @@ exports.getGreenAuditRecordsForHkeys = (hkeys, options) => {
                 }
             })
 
+            let greenExcs = await db.select("green_exceptions", filter)
+            let latestReportYear = 2019
+            greenExcs.forEach(item => {
+                // Only pass exceptions when older than begin of latest report year
+                if (item.opening_date >= new Date(latestReportYear+1, 0)) {
+                    evals.push(evalGreenExceptionRecord(item))
+                }
+            })
+
             Promise.all(evals).then(res => {
                 res.forEach(e => {
                     cacheGreenAuditRecordForHkey(e.hkey, e)
@@ -650,6 +673,7 @@ exports.getGreenAuditRecordsForHkeys = (hkeys, options) => {
         }
     })
 }
+exports.getGreenAuditRecordsForHkeys = getGreenAuditRecordsForHkeys
 
 exports.getGeosureRecordsForHkeys = (hkeys, options) => {
     return new Promise(async (resolve, reject) => {
@@ -909,14 +933,9 @@ exports.getGeosureReport = (where, offset, size) => {
 
 exports.getGreenAuditsReport = (where, offset, size) => {
     return new Promise(async (resolve, reject) => {
-        db.query(`SELECT * FROM green_audits ${where} ORDER BY _id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
-            db.query(`SELECT COUNT(*) as 'count' FROM green_audits ${where}`, [], (snd) => {
-                let proms = []
-                for (let item of fst) {
-                    const i = evalGreenAuditRecord(item)
-                    proms.push(i)
-                }
-                Promise.all(proms).then(res => resolve({result: res, total: snd[0]['count']}))
+        db.query(`SELECT hkey FROM green_all_records ${where} ORDER BY _updatedDate ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM green_all_records ${where}`, [], (snd) => {
+                getGreenAuditRecordsForHkeys(fst.map(x => x.hkey)).then(res => resolve({result: res, total: snd[0]['count']}))
             })
         })
     })
@@ -1127,18 +1146,30 @@ exports.getClientSettingsFromDB = (clientID) => {
     })
 }
 
-exports.getHotelsWithGreenAudit = () => {
+let getHotelsWithGreenAudit = () => {
     return new Promise((resolve, reject) => {
         return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_audits A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })
 }
+exports.getHotelsWithGreenAudit = getHotelsWithGreenAudit
 
-exports.getHotelsWithGreenClaim = () => {
+let getHotelsWithGreenClaim = () => {
     return new Promise((resolve, reject) => {
         return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_footprint_claims A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })
 }
+exports.getHotelsWithGreenClaim = getHotelsWithGreenClaim
+
+let getHotelsWithGreenException = () => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_exceptions A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+
+exports.getHotelsWithGreenException = getHotelsWithGreenException

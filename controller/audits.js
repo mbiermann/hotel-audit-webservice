@@ -191,17 +191,15 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
     let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys)
-    let green_exceptions = (exclude.includes('green')) ? null : storage.getGreenExceptionRecordsForHkeys(hkeys)
     let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
     let checkin = (exclude.includes('checkin')) ? null : storage.getCheckinConfigsForHkeys(hkeys, checkinDate)
 
-    Promise.all([touchless, cleansafe, green, green_exceptions, geosure, checkin]).then(async (result) => {
+    Promise.all([touchless, cleansafe, green, geosure, checkin]).then(async (result) => {
         let _touchless = result[0]
         let _cleansafe = result[1]
         let _green = result[2]
-        let _green_exceptions = result[3]
-        let _geosure = result[4]
-        let _checkin = result[5]
+        let _geosure = result[3]
+        let _checkin = result[4]
 
         let data = {}
         let csTouchlessCheckin = new Set()
@@ -243,11 +241,6 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                     let record = _green[hkey]
                     delete record.hkey
                     data[hkey].push(record)
-                } else if (hkey in _green_exceptions) {
-                    if (!(hkey in data)) data[hkey] = []
-                    let record = _green_exceptions[hkey]
-                    delete record.hkey
-                    data[hkey].push(record)
                 }
             }
             if (!(exclude.includes('geosure'))) {
@@ -287,13 +280,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 })
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
-    let proms = []
-    proms.push(storage.getHotelsWithGreenClaim())
-    proms.push(storage.getHotelsWithGreenAudit())
-    let hotels = []
-    Promise.all(proms).then(res => {
-        hotels.push(...res[0], ...res[1])
-        console.log(hotels)
+    storage.getAllHotelsWithGreenRecord().then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
         storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true}).then(res => {
             let headers = []
