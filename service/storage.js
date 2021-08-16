@@ -410,7 +410,9 @@ let evalGreenExceptionRecord = (i) => {
         if (program) rec.program = select(['name', 'link'], program)
         if (cert) rec.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
         rec.type = "green_stay_not_applicable"
-        rec.status = true
+        // Only pass exceptions when older than begin of latest report year
+        let latestReportYear = 2019
+        rec.status = (i.opening_date >= new Date(latestReportYear, 0))
         resolve(rec)
     })
 } 
@@ -652,12 +654,8 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
             })
 
             let greenExcs = await db.select("green_exceptions", filter)
-            let latestReportYear = 2019
             greenExcs.forEach(item => {
-                // Only pass exceptions when older than begin of latest report year
-                if (item.opening_date >= new Date(latestReportYear+1, 0)) {
-                    evals.push(evalGreenExceptionRecord(item))
-                }
+                evals.push(evalGreenExceptionRecord(item))
             })
 
             Promise.all(evals).then(res => {
