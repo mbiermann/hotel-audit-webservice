@@ -1146,7 +1146,7 @@ exports.getClientSettingsFromDB = (clientID) => {
 
 let getHotelsWithGreenAudit = () => {
     return new Promise((resolve, reject) => {
-        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_audits A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain, B.chain_id, B.hrs_office FROM green_audits A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })
@@ -1155,7 +1155,7 @@ exports.getHotelsWithGreenAudit = getHotelsWithGreenAudit
 
 let getHotelsWithGreenClaim = () => {
     return new Promise((resolve, reject) => {
-        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_footprint_claims A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain, B.chain_id, B.hrs_office FROM green_footprint_claims A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })
@@ -1164,7 +1164,7 @@ exports.getHotelsWithGreenClaim = getHotelsWithGreenClaim
 
 let getHotelsWithGreenException = () => {
     return new Promise((resolve, reject) => {
-        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain_id, B.hrs_office FROM green_exceptions A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain, B.chain_id, B.hrs_office FROM green_exceptions A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
             resolve(res)
         })
     })
