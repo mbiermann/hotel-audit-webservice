@@ -3,6 +3,7 @@ const router = express.Router()
 const report = require('./reports')
 const audits = require('./audits')
 const check_ins = require('./check-ins')
+const magic_login = require('./magic-login')
 const CryptoJS = require('crypto-js')
 const logger = require('../utils/logger')
 const {trackEvent} = require('../service/tracking')
@@ -13,6 +14,7 @@ const fs = require('fs')
 
 router.use('/audits', audits)
 router.use('/check-ins', check_ins)
+router.use('/magic-login', magic_login)
 
 router.get('/hotel-status', combinedAuthMiddleware, (req, resp) => {
     if (!req.query || !req.query.hkeys) return resp.status(500).json({ error: 'Missing hkeys' })

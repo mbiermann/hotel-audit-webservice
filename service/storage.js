@@ -975,6 +975,12 @@ exports.getHotelByHKey = (hkey) => {
     })
 }
 
+exports.getHotelsForEmail = (email) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT * FROM hotels LEFT JOIN emails_lookup ON hotels.hkey = emails_lookup.hkey WHERE emails_lookup.email = '${email}'`, [], resolve)
+    })
+}
+
 exports.getAllTouchlessStatus = (where, offset, size) => {
     return new Promise((resolve, reject) => {
         db.query(`SELECT * FROM touchless_stay ${where} ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
