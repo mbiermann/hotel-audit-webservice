@@ -170,11 +170,20 @@ let evalGreenClaimRecord = async (i) => {
     i.program = await getProgram(i.hkey)
     i.cert = await getLastCertificate(i.hkey)
     i.kgCo2ePOC = i.kgCo2ePor
+    if (i.kgCo2ePOC > 300) {
+        _addAnomaly(i, ANOMALIES.CARBON_EMISSION_TOO_HIGH, "Carbon emission per occupied room", i.kgCo2ePOC)
+    }
     i.lH2OPOC = i.lPor
+    if (i.lH2OPOC < 10) {
+        _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
+    }
     i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
     if (!i.no_waste_data_available) {
         i.kgWastePOC = i.kgWastePor
+        if (i.kgWastePor <= 0) {
+            _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
+        }
         i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
     // When waste data is absent, set KPI negative and grant the worst class
     } else {
@@ -195,7 +204,8 @@ const ANOMALIES = {
     LANDFILL_WASTE_TOO_LOW: "LANDFILL_WASTE_TOO_LOW",
     PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
-    NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW"
+    NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
+    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH"
 }
 
 const _addAnomaly = (item, anomalyType, metric, value) => {
