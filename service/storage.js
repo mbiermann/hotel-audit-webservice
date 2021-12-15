@@ -181,8 +181,8 @@ let evalGreenClaimRecord = async (i) => {
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
     if (!i.no_waste_data_available) {
         i.kgWastePOC = i.kgWastePor
-        if (i.kgWastePor <= 0) {
-            _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
+        if (i.kgWastePOC > 10) {
+            _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_HIGH, "Waste per occupied room", i.kgWastePOC)
         }
         i.wasteClass = benchmarkWasteProduction(i.kgWastePOC)
     // When waste data is absent, set KPI negative and grant the worst class
@@ -201,7 +201,6 @@ const ANOMALIES = {
     DISTRICT_HEATING_FACTOR_TOO_HIGH: "DISTRICT_HEATING_FACTOR_TOO_HIGH",
     DISTRICT_HEATING_TOO_LOW: "DISTRICT_HEATING_TOO_LOW",
     LANDFILL_WASTE_TOO_HIGH: "LANDFILL_WASTE_TOO_HIGH",
-    LANDFILL_WASTE_TOO_LOW: "LANDFILL_WASTE_TOO_LOW",
     PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
@@ -241,9 +240,6 @@ let evalGreenAuditRecord = (i) => {
             let totalWaste = 0
             if (!i.no_waste_data_available) {
                 totalWaste = i.landfill_waste_cm
-                if (i.landfill_waste_cm < 0) {
-                    _addAnomaly(i, ANOMALIES.LANDFILL_WASTE_TOO_LOW, "Landfill waste (cubic meters)", i.landfill_waste_cm)
-                }
             }
 
             if (i.is_privatespace_available) {
