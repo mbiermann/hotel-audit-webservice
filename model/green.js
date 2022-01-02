@@ -5,7 +5,6 @@ let select = (fields, obj) => {
 class GreenStayAuditRecord {
     constructor(auditData) {
         this.hkey = auditData.hkey
-        this.chain_id = auditData.chain_id
         this.id = auditData._id
         this.created_date = auditData._createdDate
         this.updated_date = auditData._updatedDate
@@ -22,6 +21,9 @@ class GreenStayAuditRecord {
         if (auditData.anomalies && auditData.anomalies.length > 0) {
             this.anomalies = auditData.anomalies
             this.type = "green_stay_blocked_anomaly"
+            this.status = false
+        } else if (auditData.chain_id == 15 && this.greenClass != "A") {
+            this.type = "green_stay_blocked_filter"
             this.status = false
         } else {
             this.type = "green_stay_self_inspection"

@@ -671,11 +671,6 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
     
                 Promise.all(evals).then(res => {
                     for (const [i, e] of Object.entries(res)) {
-                        // Filter out Marriott hotels with a different green class than A
-                        if (e.chain_id == "15" && e.greenClass !== "A") {
-                            continue;
-                        }
-                        delete e.chain_id
                         cacheGreenAuditRecordForHkey(e.hkey, e)
                         records[e.hkey] = e
                     }
