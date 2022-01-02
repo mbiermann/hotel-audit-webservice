@@ -5,6 +5,7 @@ let select = (fields, obj) => {
 class GreenStayAuditRecord {
     constructor(auditData) {
         this.hkey = auditData.hkey
+        this.chain_id = auditData.chain_id
         this.id = auditData._id
         this.created_date = auditData._createdDate
         this.updated_date = auditData._updatedDate

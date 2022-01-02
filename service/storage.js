@@ -191,6 +191,9 @@ let evalGreenClaimRecord = async (i) => {
         i.wasteClass = 'D'
     }
     i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
+    /*if (i.greenClass != "A") {
+        _addAnomaly(i, ANOMALIES.HOTEL_BLOCKED_FROM_GREEN_CLASS, "Green class not matching agreement", i.greenClass)
+    }*/
     return new GreenStayAuditRecord(i)
 }
 
@@ -204,7 +207,8 @@ const ANOMALIES = {
     PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
-    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH"
+    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH",
+    HOTEL_BLOCKED_FROM_GREEN_CLASS: "HOTEL_BLOCKED_FROM_GREEN_CLASS"
 }
 
 const _addAnomaly = (item, anomalyType, metric, value) => {
@@ -640,37 +644,45 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
             
             let filter = `WHERE hkey IN (${leftHkeys})`
             
-            let greenClaims = await db.select("green_footprint_claims", filter)
-            let evals = []
-            let latestYears = {}
-            greenClaims.forEach(item => {
-                if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
-                    evals.push(evalGreenClaimRecord(item))
-                    latestYears[item.hkey] = item.report_year
-                }
+            //let greenClaims = await db.select("green_footprint_claims", filter)
+            await db.query(`SELECT A.*, B.chain_id FROM green_footprint_claims A LEFT JOIN hotels B ON A.hkey = B.hkey WHERE A.hkey IN (${leftHkeys})`, async (error, greenClaims, fields) => {
+                let evals = []
+                let latestYears = {}
+                greenClaims.forEach(item => {
+                    if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
+                        evals.push(evalGreenClaimRecord(item))
+                        latestYears[item.hkey] = item.report_year
+                    }
+                })
+                
+                let greenAudits = await db.select("green_audits", filter)
+                latestYears = {}
+                greenAudits.forEach(item => {
+                    if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
+                        evals.push(evalGreenAuditRecord(item))
+                        latestYears[item.hkey] = item.report_year
+                    }
+                })
+    
+                let greenExcs = await db.select("green_exceptions", filter)
+                greenExcs.forEach(item => {
+                    evals.push(evalGreenExceptionRecord(item))
+                })
+    
+                Promise.all(evals).then(res => {
+                    for (const [i, e] of Object.entries(res)) {
+                        // Filter out Marriott hotels with a different green class than A
+                        if (e.chain_id == "15" && e.greenClass !== "A") {
+                            continue;
+                        }
+                        delete e.chain_id
+                        cacheGreenAuditRecordForHkey(e.hkey, e)
+                        records[e.hkey] = e
+                    }
+                    resolve(records)
+                })
             })
             
-            let greenAudits = await db.select("green_audits", filter)
-            latestYears = {}
-            greenAudits.forEach(item => {
-                if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
-                    evals.push(evalGreenAuditRecord(item))
-                    latestYears[item.hkey] = item.report_year
-                }
-            })
-
-            let greenExcs = await db.select("green_exceptions", filter)
-            greenExcs.forEach(item => {
-                evals.push(evalGreenExceptionRecord(item))
-            })
-
-            Promise.all(evals).then(res => {
-                res.forEach(e => {
-                    cacheGreenAuditRecordForHkey(e.hkey, e)
-                    records[e.hkey] = e
-                })
-                resolve(records)
-            })
 
         } catch (err) {
             reject(err)
