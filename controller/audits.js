@@ -190,7 +190,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
-    let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys)
+    let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys, {backfill: ("true" == req.query.backfill)})
     let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
     let checkin = (exclude.includes('checkin')) ? null : storage.getCheckinConfigsForHkeys(hkeys, checkinDate)
 

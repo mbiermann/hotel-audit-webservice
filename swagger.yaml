@@ -390,6 +390,11 @@ paths:
         description: "Comma-separated list of hkeys"
         required: true
         type: "string"
+      - name: "backfill"
+        in: "query"
+        description: "***For internal and educational purposes only - should not be used in public production environments.***\nOptional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
+        required: false
+        type: "boolean"
       responses:
         "200":
           description: "Successful operation"
@@ -461,6 +466,11 @@ paths:
         in: "query"
         description: "Comma-separated list of audit categories to be included from response. Audit categories are 'touchless','cleansafe','green', 'geosure' and 'checkin'."
         type: "string"
+      - name: "backfill"
+        in: "query"
+        description: "***For internal and educational purposes only - should not be used in public production environments.***\nOptional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
+        required: false
+        type: "boolean"
       responses:
         "200":
           description: "Successful operation"

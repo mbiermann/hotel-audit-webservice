@@ -18,17 +18,22 @@ class GreenStayAuditRecord {
         this.greenClass = auditData.greenClass
         if (auditData.program) this.program = select(['name', 'link'], auditData.program)
         if (auditData.cert) this.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], auditData.cert)
-        if (auditData.anomalies && auditData.anomalies.length > 0) {
-            this.anomalies = auditData.anomalies
-            this.type = "green_stay_blocked_anomaly"
-            this.status = false
-        } else if (auditData.chain_id == 15 && this.greenClass != "A") {
-            this.type = "green_stay_blocked_filter"
-            this.status = false
+        if (auditData.status === undefined) {
+            if (auditData.anomalies && auditData.anomalies.length > 0) {
+                this.anomalies = auditData.anomalies
+                this.type = "green_stay_blocked_anomaly"
+                this.status = false
+            } else if (auditData.chain_id == 15 && this.greenClass != "A") {
+                this.type = "green_stay_blocked_filter"
+                this.status = false
+            } else {
+                this.type = "green_stay_self_inspection"
+                if (auditData.greenClass === "A") this.type = `${this.type}_hero`
+                this.status = true
+            }
         } else {
-            this.type = "green_stay_self_inspection"
-            if (auditData.greenClass === "A") this.type = `${this.type}_hero`
-            this.status = true
+            this.type = auditData.type
+            this.status = auditData.status
         }
     }
 }

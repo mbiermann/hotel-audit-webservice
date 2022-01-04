@@ -17,7 +17,7 @@ router.get('/hotel-status', combinedAuthMiddleware, (req, resp) => {
     if (!req.query || !req.query.hkeys) return resp.status(500).json({ error: 'Missing hkeys' })
     const hkeys = req.query.hkeys.split(',').map((val) => Number(val))
     
-    storage.getHotelStatusByHkeys(hkeys, {green: true, clean: true} ,false, true).then(statuses => {
+    storage.getHotelStatusByHkeys(hkeys, {green: true, clean: true}, false, false, true).then(statuses => {
         resp.send(statuses)
     }).catch((err) => {
         console.log(err)

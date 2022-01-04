@@ -163,7 +163,16 @@ let getGreenhouseGasFactors = (i) => {
         })
 
     })   
+}
 
+let evalGreenBackfillRecord = async (i) => {
+    i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
+    i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
+    i.wasteClass = (!i.kgWastePOC > -1) ? benchmarkWasteProduction(i.kgWastePOC) : 'D'
+    i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
+    i.status = false
+    i.type = `green_stay_backfill_mode_${i.mode}`
+    return new GreenStayAuditRecord(i)
 }
 
 let evalGreenClaimRecord = async (i) => {
@@ -191,9 +200,6 @@ let evalGreenClaimRecord = async (i) => {
         i.wasteClass = 'D'
     }
     i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
-    /*if (i.greenClass != "A") {
-        _addAnomaly(i, ANOMALIES.HOTEL_BLOCKED_FROM_GREEN_CLASS, "Green class not matching agreement", i.greenClass)
-    }*/
     return new GreenStayAuditRecord(i)
 }
 
@@ -207,8 +213,7 @@ const ANOMALIES = {
     PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
-    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH",
-    HOTEL_BLOCKED_FROM_GREEN_CLASS: "HOTEL_BLOCKED_FROM_GREEN_CLASS"
+    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH"
 }
 
 const _addAnomaly = (item, anomalyType, metric, value) => {
@@ -668,6 +673,22 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                 greenExcs.forEach(item => {
                     evals.push(evalGreenExceptionRecord(item))
                 })
+
+                if (options && options.backfill) {
+                    let backfillProm = new Promise((resolve, reject) => {
+                        db.query(`SELECT * FROM green_hotels_backfill WHERE \`mode\` > 0 AND hkey IN (${leftHkeys})`, async (error, backfills, fields) => {
+                            if (error) {
+                                reject()
+                            } else {
+                                for (const [i, e] of Object.entries(backfills)) {
+                                    evals.push(evalGreenBackfillRecord(e))
+                                }
+                                resolve()
+                            }
+                        })
+                    })
+                    await backfillProm                    
+                }
     
                 Promise.all(evals).then(res => {
                     for (const [i, e] of Object.entries(res)) {
@@ -806,7 +827,7 @@ const getCachedGeosureRecordsForHkeys = (hkeys) => {
     })   
 }
 
-exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cache = false, bypass_redirect_mapping = false, exclude = []) => {
+exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cache = false, backfill = false, bypass_redirect_mapping = false, exclude = []) => {
     let filter = ''
     filter = `WHERE hkey IN (${hkeys})`
 
@@ -883,7 +904,7 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
         })
         proms.push(greenTrackingFetch)       
     
-        let greenAuditRecordsFetch = this.getGreenAuditRecordsForHkeys(hkeys).then((res) => {
+        let greenAuditRecordsFetch = this.getGreenAuditRecordsForHkeys(hkeys, {backfill: backfill}).then((res) => {
             for (let hkey of Object.keys(res)) {
                 let elem = res[hkey]
                 if (!audits[hkey]) audits[hkey] = []

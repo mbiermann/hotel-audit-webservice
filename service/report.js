@@ -25,7 +25,7 @@ module.exports = {
                         let res2 = await db.select('hotels', '', 'hkey', 'ORDER BY hkey asc', skip = i, limit = incr)
                         let hkeys = res2.map(val => val.hkey)
                         let programs = {clean: (type === 'clean'), green: (type === 'green')}
-                        let statuses = await storage.getHotelStatusByHkeys(hkeys, programs, true, true, true, ['code'])
+                        let statuses = await storage.getHotelStatusByHkeys(hkeys, programs, true, true, false, true, ['code'])
                         if (i === 0) {
                             for (status of statuses) {
                                 for (key of Object.keys(status)) if (headers.indexOf(key) === -1 && !!status[key]) headers.push(key)
