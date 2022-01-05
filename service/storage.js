@@ -213,7 +213,8 @@ const ANOMALIES = {
     PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
-    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH"
+    CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH",
+    LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH: "LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH"
 }
 
 const _addAnomaly = (item, anomalyType, metric, value) => {
@@ -277,6 +278,10 @@ let evalGreenAuditRecord = (i) => {
                     total_gas_kwh += i.laundry_total_gas_kwh
                     consumedWater += i.laundry_total_water
                 } else if (i.laundry_metric_tons > 0) {
+                    let laundryKgPOC = (i.laundry_metric_tons*1000) / i.total_occupied_rooms
+                    if (laundryKgPOC > 10) {
+                        _addAnomaly(i, ANOMALIES.LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH, "Laundry per occupied room (calculated to kilograms)", Math.round(laundryKgPOC,0))
+                    }                   
                     total_electricity_kwh += 180 * i.laundry_metric_tons
                     total_oil_litres += 111 * i.laundry_metric_tons
                     total_gas_kwh += 1560 * i.laundry_metric_tons
