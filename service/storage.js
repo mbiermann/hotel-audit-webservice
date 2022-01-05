@@ -963,11 +963,12 @@ exports.getGeosureReport = (where, offset, size) => {
     })
 }
 
-exports.getGreenAuditsReport = (where, offset, size) => {
+exports.getGreenAuditsReport = (where, offset, size, backfill_mode) => {
     return new Promise(async (resolve, reject) => {
-        db.query(`SELECT hkey FROM green_all_records ${where} ORDER BY _updatedDate ASC LIMIT ${offset}, ${size}`, [], (fst) => {
-            db.query(`SELECT COUNT(*) as 'count' FROM green_all_records ${where}`, [], (snd) => {
-                getGreenAuditRecordsForHkeys(fst.map(x => x.hkey)).then(res => resolve({result: res, total: snd[0]['count']}))
+        let table = backfill_mode ? "green_all_updates_backfilled" : "green_all_records"
+        db.query(`SELECT hkey FROM ${table} ${where} ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(*) as 'count' FROM ${table} ${where}`, [], (snd) => {
+                getGreenAuditRecordsForHkeys(fst.map(x => x.hkey), {backfill: backfill_mode}).then(res => resolve({result: res, total: snd[0]['count']}))
             })
         })
     })

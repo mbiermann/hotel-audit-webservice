@@ -58,7 +58,6 @@ router.get('/report/touchlessstay', combinedAuthMiddleware, async (req, resp) =>
             }
             where = `WHERE DATE(date) >= '${req.query.since}'`
         }
-
     
         storage.getAllTouchlessStatus(where, offset, size).then((res) => {
             resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
@@ -111,7 +110,7 @@ router.get('/report/green', combinedAuthMiddleware, async (req, resp) => {
                 return resp.status(403).send({ message: 'Invalid use of parameter ´since´!' })
             where = `WHERE DATE(_updatedDate) >= '${req.query.since}'`
         }
-        storage.getGreenAuditsReport(where, offset, size).then((res) => {
+        storage.getGreenAuditsReport(where, offset, size, ("true" == req.query.backfill)).then((res) => {
             resp.status(200).json({ results: res.result, page_number: page, page_size: size, total_pages: Math.ceil(res.total / size) });
         })   
     } else {

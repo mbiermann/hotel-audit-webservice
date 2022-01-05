@@ -594,10 +594,15 @@ paths:
         type: "integer"
         minimum: 1
         maximum: 500
-      - name: "where"
+      - name: "since"
         in: "query"
         description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
         type: "string"
+      - name: "backfill"
+        in: "query"
+        description: "***For internal and educational purposes only - should not be used in public production environments.***\nOptional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
+        required: false
+        type: "boolean"
       responses:
         "200":
           description: "Successful operation"
@@ -674,7 +679,7 @@ paths:
         type: "integer"
         minimum: 1
         maximum: 500
-      - name: "where"
+      - name: "since"
         in: "query"
         description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
         type: "string"
@@ -742,7 +747,7 @@ paths:
         type: "integer"
         minimum: 1
         maximum: 500
-      - name: "where"
+      - name: "since"
         in: "query"
         description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
         type: "string"
