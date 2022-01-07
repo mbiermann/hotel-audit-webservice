@@ -168,7 +168,7 @@ let getGreenhouseGasFactors = (i) => {
 let evalGreenBackfillRecord = async (i) => {
     i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
-    i.wasteClass = (!i.kgWastePOC > -1) ? benchmarkWasteProduction(i.kgWastePOC) : 'D'
+    i.wasteClass = (i.kgWastePOC > -1) ? benchmarkWasteProduction(i.kgWastePOC) : 'D'
     i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
     i.status = false
     i.type = `green_stay_backfill_mode_${i.mode}`
@@ -214,7 +214,9 @@ const ANOMALIES = {
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
     CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH",
-    LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH: "LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH"
+    LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH: "LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH",
+    OCCUPANCY_TOO_LOW: "OCCUPANCY_TOO_LOW",
+    TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH: "TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH"
 }
 
 const _addAnomaly = (item, anomalyType, metric, value) => {
@@ -234,6 +236,11 @@ let evalGreenAuditRecord = (i) => {
             let total_electricity_kwh = i.total_electricity_kwh || 0
             let total_gas_kwh = i.total_gas_kwh || 0
             let total_oil_litres = i.total_oil_litres || 0
+
+            let minOccupancy = i.total_guest_rooms * 365 * 0.2
+            if (minOccupancy > i.total_occupied_rooms) {
+                _addAnomaly(i, ANOMALIES.OCCUPANCY_TOO_LOW, `Total occupied rooms below representative minimum of 20% of available rooms in year's time`, i.total_occupied_rooms)
+            }  
 
             let shareRoomsToMeetingSpaces = i.total_guest_room_corridor_area_sqm / (i.total_guest_room_corridor_area_sqm + i.total_meeting_space_sqm)
 
@@ -278,9 +285,9 @@ let evalGreenAuditRecord = (i) => {
                     total_gas_kwh += i.laundry_total_gas_kwh
                     consumedWater += i.laundry_total_water
                 } else if (i.laundry_metric_tons > 0) {
-                    let laundryKgPOC = (i.laundry_metric_tons*1000) / i.total_occupied_rooms
+                    let laundryKgPOC = Math.round((i.laundry_metric_tons*1000) / i.total_occupied_rooms,0)
                     if (laundryKgPOC > 10) {
-                        _addAnomaly(i, ANOMALIES.LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH, "Laundry per occupied room (calculated to kilograms)", Math.round(laundryKgPOC,0))
+                        _addAnomaly(i, ANOMALIES.LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH, `Total laundry tonnage of ${i.laundry_metric_tons} divided by total occupied rooms (kilogram) of ${laundryKgPOC} too high`, i.laundry_metric_tons)
                     }                   
                     total_electricity_kwh += 180 * i.laundry_metric_tons
                     total_oil_litres += 111 * i.laundry_metric_tons
@@ -346,6 +353,10 @@ let evalGreenAuditRecord = (i) => {
 
             i.kgCo2ePOC = (shareRoomsToMeetingSpaces * totalKgCo2e) / i.total_occupied_rooms
             i.carbonClass = await benchmarkCarbonEmission(i, i.electricity_emission_location)
+
+            if (i.kgCo2ePOC > 1000) {
+                _addAnomaly(i, ANOMALIES.TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH, `Total carbon per occupied room unusually high above 1 ton carbon equivalent`, i.kgCo2ePOC)
+            }  
 
             i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
 
