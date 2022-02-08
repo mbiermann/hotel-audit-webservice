@@ -16,6 +16,7 @@ class GreenStayAuditRecord {
         this.waterClass = auditData.waterClass
         this.wasteClass = auditData.wasteClass
         this.greenClass = auditData.greenClass
+        if (auditData.confidence) this.confidence = auditData.confidence
         if (auditData.program) this.program = select(['name', 'link'], auditData.program)
         if (auditData.cert) this.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], auditData.cert)
         if (auditData.status === undefined) {
