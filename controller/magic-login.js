@@ -73,9 +73,17 @@ router.post('/create', combinedAuthMiddleware, async (req, res) => {
         if (!schemaCheck.validate(postData, createMagicLoginPostBodySchema))
             throw new PostBodyValidationError("Invalid POST body.")
         let hotel = await storage.getHotelByHKey(postData.id)
+        let link = `https://hotel-audit.hrs.com/start/access/hotel/${hotel.hkey}/${hotel.code}`
+        let i = 0
+        for (let key in req.query) {
+            if (/^utm_.*/.test(key)) {
+                link += `${(i === 0 ? "?" : "&")}${key}=${req.query[key]}`
+                i++
+            }
+        }
         let payload = {
             date: new Date(),
-            link: `https://hotel-audit.hrs.com/start/access/hotel/${hotel.hkey}/${hotel.code}`
+            link: link
         }
         let cipherPayload = CryptoJS.AES.encrypt(JSON.stringify(payload), process.env.CERT_PASS).toString()
         let e64 = CryptoJS.enc.Base64.parse(cipherPayload)
@@ -98,7 +106,6 @@ router.get('/resolve/:payload', async (req, res) => {
         let bytes = CryptoJS.AES.decrypt(CryptoJS.enc.Hex.parse(req.params.payload).toString(CryptoJS.enc.Base64), process.env.CERT_PASS)
         let dec = bytes.toString(CryptoJS.enc.Utf8)
         if (dec.length === 0) return res.sendStatus(403)
-        console.log(dec)
         let payload = JSON.parse(dec)
         if (payload.date < new Date() - (10*60)) {
             throw new MagicLoginExpiredError()
