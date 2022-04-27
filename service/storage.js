@@ -500,14 +500,17 @@ const cacheGreenTrackingForHkey = (hkey, elem) => {
     cache.set(`green_tracking:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
-const getCachedGreenAuditRecordsForHkeys = (hkeys) => {
+const getCachedGreenAuditRecordsForHkeys = (hkeys, shall_backfill) => {
     return new Promise((resolve, reject) => {
         let data = {}
         let proms = []
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
                 cache.get(`green:${hkey}`, (err, val) => {
-                    if (!!val) data[hkey] = JSON.parse(val)
+                    if (!!val) {
+                        let obj = JSON.parse(val)
+                        if (shall_backfill || !/backfill/.test(obj.type)) data[hkey] = obj
+                    }
                     resolve1()
                 })
             }))
@@ -673,7 +676,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
         try {
             hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
             if (hkeys.length === 0) return resolve([])
-            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenAuditRecordsForHkeys(hkeys))
+            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenAuditRecordsForHkeys(hkeys, (options && options.backfill)))
             const hkeysFromCache = Object.keys(records).map(e => Number(e))
             let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
             if (leftHkeys.length === 0) return resolve(records)
