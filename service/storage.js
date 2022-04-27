@@ -182,12 +182,19 @@ let evalGreenClaimRecord = async (i) => {
     if (i.kgCo2ePOC > 300) {
         _addAnomaly(i, ANOMALIES.CARBON_EMISSION_TOO_HIGH, "Carbon emission per occupied room", i.kgCo2ePOC)
     }
-    i.lH2OPOC = i.lPor
-    if (i.lH2OPOC < 10) {
-        _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
-    }
-    i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
+    
+    if (!i.no_water_data_available) {
+        i.lH2OPOC = i.lPor
+        if (i.lH2OPOC < 10) {
+            _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
+        }
+        i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
+    } else {
+        i.lH2OPOC = -1
+        i.waterClass = 'D'
+    }
+        
     if (!i.no_waste_data_available) {
         i.kgWastePOC = i.kgWastePor
         if (i.kgWastePOC > 10) {
@@ -249,9 +256,12 @@ let evalGreenAuditRecord = (i) => {
             }
 
             // Evaluate water consumption
-            let consumedWater = i.total_metered_water + i.total_unmetered_water - i.total_sidebar_water - i.onsite_waste_water_treatment
-            if ((i.total_metered_water + i.total_unmetered_water) <= 0) {
-                _addAnomaly(i, ANOMALIES.TOTAL_WATER_TOO_LOW, "Total metered and unmetered water (liters)", (i.total_metered_water + i.total_unmetered_water))
+            let consumedWater = 0
+            if (!i.no_water_data_available) {
+                consumedWater = i.total_metered_water + i.total_unmetered_water - i.total_sidebar_water - i.onsite_waste_water_treatment
+                if ((i.total_metered_water + i.total_unmetered_water) <= 0) {
+                    _addAnomaly(i, ANOMALIES.TOTAL_WATER_TOO_LOW, "Total metered and unmetered water (liters)", (i.total_metered_water + i.total_unmetered_water))
+                }
             }
 
             let totalWaste = 0
@@ -268,12 +278,12 @@ let evalGreenAuditRecord = (i) => {
                     total_electricity_kwh -= i.privatespace_total_electricity_kwh
                     total_oil_litres -= i.privatespace_total_oil_litres
                     total_gas_kwh -= i.privatespace_total_gas_kwh
-                    consumedWater -= i.privatespace_total_water
+                    if (!i.no_water_data_available) consumedWater -= i.privatespace_total_water
                 } else if (i.total_privatespace_sqm > 0) {
                     total_electricity_kwh -= total_electricity_kwh * privateSpaceShare
                     total_oil_litres -= total_oil_litres * privateSpaceShare
                     total_gas_kwh -= total_gas_kwh * privateSpaceShare
-                    consumedWater -= consumedWater * privateSpaceShare
+                    if (!i.no_water_data_available) consumedWater -= consumedWater * privateSpaceShare
                 }
                 if (!i.no_waste_data_available) totalWaste -= totalWaste * privateSpaceShare // Approximate, as we don't request specific figures
             }
@@ -283,7 +293,7 @@ let evalGreenAuditRecord = (i) => {
                     total_electricity_kwh += i.laundry_total_electricity_kwh
                     total_oil_litres += i.laundry_total_oil_litres
                     total_gas_kwh += i.laundry_total_gas_kwh
-                    consumedWater += i.laundry_total_water
+                    if (!i.no_water_data_available) consumedWater += i.laundry_total_water
                 } else if (i.laundry_metric_tons > 0) {
                     let laundryKgPOC = Math.round((i.laundry_metric_tons*1000) / i.total_occupied_rooms,0)
                     if (laundryKgPOC > 10) {
@@ -292,16 +302,21 @@ let evalGreenAuditRecord = (i) => {
                     total_electricity_kwh += 180 * i.laundry_metric_tons
                     total_oil_litres += 111 * i.laundry_metric_tons
                     total_gas_kwh += 1560 * i.laundry_metric_tons
-                    consumedWater += 20000 * i.laundry_metric_tons // HWMI
+                    if (!i.no_water_data_available) consumedWater += 20000 * i.laundry_metric_tons // HWMI
                 }
             }
 
-            i.lH2OPOC = (shareRoomsToMeetingSpaces * consumedWater) / i.total_occupied_rooms
-            if (i.lH2OPOC < 10) {
-                _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
+            if (i.no_water_data_available) {
+                i.lH2OPOC = -1
+                i.waterClass = 'D'
+            } else {
+                i.lH2OPOC = (shareRoomsToMeetingSpaces * consumedWater) / i.total_occupied_rooms
+                if (i.lH2OPOC < 10) {
+                    _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
+                }
+                i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
             }
-            i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
-
+            
             let totalKgCo2e = 0
 
             if (i.mobile_fuels) {
