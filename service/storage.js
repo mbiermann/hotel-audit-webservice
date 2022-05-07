@@ -488,8 +488,8 @@ const cacheAuditRecordForHkey = (hkey, elem) => {
     cache.expire(hkey, process.env.REDIS_TTL)
 }
 
-const cacheGreenAuditRecordForHkey = (hkey, elem) => {
-    cache.set(`green:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+const cacheGreenAuditRecord = (elem) => {
+    cache.set(`green:${elem.hkey}:${elem.type}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
 const cacheGreenExceptionRecordForHkey = (hkey, elem) => {
@@ -506,11 +506,15 @@ const getCachedGreenAuditRecordsForHkeys = (hkeys, shall_backfill) => {
         let proms = []
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
-                cache.get(`green:${hkey}`, (err, val) => {
-                    if (!!val) {
-                        let obj = JSON.parse(val)
-                        if (shall_backfill || !/backfill/.test(obj.type)) data[hkey] = obj
-                    }
+                cache.keys(`green:${hkey}:*`, (err, val) => {
+                    val.forEach(v => {
+                        if (!!v) {
+                            cache.get(v, (err1, val1) => {
+                                let obj = JSON.parse(val1)
+                                if ((shall_backfill && !/blocked/.test(obj.type)) || (!shall_backfill && !/backfill/.test(obj.type))) data[hkey] = obj
+                            })
+                        }
+                    })
                     resolve1()
                 })
             }))
@@ -726,7 +730,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
     
                 Promise.all(evals).then(res => {
                     for (const [i, e] of Object.entries(res)) {
-                        cacheGreenAuditRecordForHkey(e.hkey, e)
+                        cacheGreenAuditRecord(e)
                         records[e.hkey] = e
                     }
                     resolve(records)
