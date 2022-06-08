@@ -2,11 +2,9 @@ const cache = require('../client/cache')
 const crypto = require('crypto')
 const db = require('../client/database')
 const cloudStorage = require('../client/cloud-storage')
-const request = require('request')
 const flatten = require('flat')
 const logger = require('../utils/logger')
 const {GreenStayAuditRecord} = require('../model/green')
-
 
 const classes = ['A','B','C','D']
 
@@ -480,6 +478,7 @@ const getLastCertificate = async (hkey) => {
     let res = await db.select('green_certificates', `WHERE hkey = ${hkey}`, '*', 'ORDER BY validity_end DESC', 0, 1)
     return res[0]
 }
+exports.getLastCertificate = getLastCertificate
 
 const cacheAuditRecordForHkey = (hkey, elem) => {
     let key = crypto.createHash('md5').update(JSON.stringify(elem)).digest('hex')
@@ -488,8 +487,12 @@ const cacheAuditRecordForHkey = (hkey, elem) => {
     cache.expire(hkey, process.env.REDIS_TTL)
 }
 
-const cacheGreenAuditRecord = (elem) => {
-    cache.set(`green:${elem.hkey}:${elem.type}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+const cacheGreenAuditRecord = (elem, shall_backfill) => {
+    cache.set(`green:${elem.hkey}:${shall_backfill}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+}
+
+const cacheGSI2AuditRecord = (customerId, rec) => {
+    cache.set(`gsi2:${customerId}:${rec.hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL);
 }
 
 const cacheGreenExceptionRecordForHkey = (hkey, elem) => {
@@ -500,21 +503,24 @@ const cacheGreenTrackingForHkey = (hkey, elem) => {
     cache.set(`green_tracking:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
+const getCachedGSI2AuditRecordForHkeyAndCustomerId = (hkey, customerId) => {
+    return new Promise((resolve, reject) => {
+        cache.get(`gsi2:${customerId}:${hkey}`, (err, val) => {
+            let obj = null
+            if (val) obj = JSON.parse(val)
+            resolve({hkey: hkey, obj: obj})
+        })
+    })
+}
+
 const getCachedGreenAuditRecordsForHkeys = (hkeys, shall_backfill) => {
     return new Promise((resolve, reject) => {
         let data = {}
         let proms = []
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
-                cache.keys(`green:${hkey}:*`, (err, val) => {
-                    val.forEach(v => {
-                        if (!!v) {
-                            cache.get(v, (err1, val1) => {
-                                let obj = JSON.parse(val1)
-                                if ((shall_backfill && !/blocked/.test(obj.type)) || (!shall_backfill && !/backfill/.test(obj.type))) data[hkey] = obj
-                            })
-                        }
-                    })
+                cache.get(`green:${hkey}:${shall_backfill}`, (err, obj) => {
+                    if (!!obj) data[hkey] = JSON.parse(obj)
                     resolve1()
                 })
             }))
@@ -675,12 +681,102 @@ exports.getAllHotelsWithGreenRecord = () => {
     })
 }
 
+let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options) => {
+    return new Promise(async (resolve, reject) => {
+        let customerId = (targetCustomerId) ? targetCustomerId : 0
+
+        let cacheProms = []
+        if (!options  || !('bypass_cache' in options) || options.bypass_cache === false) {
+            for (let hkey of hkeys) {
+                cacheProms.push(new Promise((resolve3) => {
+                    getCachedGSI2AuditRecordForHkeyAndCustomerId(hkey, customerId).then(resolve3)
+                }))
+            }
+        }
+        let cacheResults = await Promise.all(cacheProms)
+        cacheResults = cacheResults.reduce((res, item, idx, arr) => {
+            if (!!item.obj) res[item.hkey] = item.obj
+            return res
+        }, {})
+
+        const leftHKeys = hkeys.filter(hkey => !(hkey in cacheResults))
+
+        let respond = (dbResultsFinal, cachedResultsFinal) => {
+            Object.assign(dbResultsFinal, cachedResultsFinal)
+            resolve(dbResultsFinal)
+        }
+        if (leftHKeys.length === 0) return respond({}, cacheResults)
+
+        let filter = `WHERE customer_id = ${customerId}`
+        let weights = await db.select("gsi2_customer_question_weights", filter)
+        
+        if (weights.length === 0) return resp.status(500).json({error: `Weights for customer ${customerId} not (completely) configured.`})
+        weights = weights.reduce((res, item, idx, arr) => {
+            res[item.question_id] = item
+            return res
+        }, {})
+
+        let proms = []
+        
+        leftHKeys.forEach(async hkey => {
+            proms.push(new Promise((resolve2, reject2) => {
+                db.query(`SELECT A.question_id, A.response FROM gsi2_responses A LEFT JOIN gsi2_reports B ON A.report_id = B._id WHERE B.hkey = ${hkey}`, async (error, responses, fields) => {
+                    if (responses.length === 0) {
+                        let obj = {
+                            hkey: hkey,
+                            customerId: customerId,
+                            status: false,
+                            type: 'gsi2_not_available'
+                        }
+                        cache.set(`gsi2:${customerId}:${obj.hkey}`, JSON.stringify(obj), 'EX', process.env.REDIS_TTL);
+                        return resolve2(obj)
+                    }
+                    let points = 0
+                    Object.keys(weights).forEach(k => {
+                        let responseRec = responses.find(e => e.question_id == k)
+                        if (responseRec) points += parseFloat(responseRec.response) * weights[k].weight
+                    })
+                    let filter = `WHERE customer_id = ${customerId} AND ${points} >= \`min\` AND ${points} < \`max\``
+                    let gradeQueryResult = await db.select("gsi2_customer_grading", filter)
+                    if (gradeQueryResult.length === 0) reject({error: `Grades for customer ${customerId} not (completely) configured.`})
+                    db.query(`SELECT \`_id\`, \`rank\` FROM gsi2_levels WHERE _id NOT IN (\
+                        SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (\
+                            SELECT A.assessment FROM gsi2_level_assessments A LEFT JOIN gsi2_reports B ON A.assessment = B.assessment \
+                            WHERE A.required = 1 AND B.hkey = ${hkey})) ORDER BY \`rank\` desc limit 0,1`, 
+                    async (err2, res2, flds2) => {
+                        let level = (res2.length === 0) ? "NONE" : res2[0]._id
+                        const rec = {
+                            hkey: hkey,
+                            customerId: customerId,
+                            grade: gradeQueryResult[0].grade,
+                            assessment_level: level,
+                            status: true,
+                            type: 'gsi2_self_inspection'
+                        }
+                        cacheGSI2AuditRecord(customerId, rec)
+                        resolve2(rec)
+                    })                
+                })
+            }))        
+        })
+        Promise.all(proms).then(dbResults => {
+            let results = dbResults.reduce((res, item, idx, arr) => {
+                if (!!item) res[item.hkey] = item
+                return res
+            }, {})   
+            respond(results, cacheResults)
+        }).catch(reject)
+    })
+}
+exports.getGSI2AuditRecordsForHkeysAndCustomerId = getGSI2AuditRecordsForHkeysAndCustomerId
+
 let getGreenAuditRecordsForHkeys = (hkeys, options) => {
+    let shall_backfill = (options && options.backfill)
     return new Promise(async (resolve, reject) => {
         try {
             hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
             if (hkeys.length === 0) return resolve([])
-            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenAuditRecordsForHkeys(hkeys, (options && options.backfill)))
+            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenAuditRecordsForHkeys(hkeys, shall_backfill))
             const hkeysFromCache = Object.keys(records).map(e => Number(e))
             let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
             if (leftHkeys.length === 0) return resolve(records)
@@ -694,47 +790,65 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                 greenClaims.forEach(item => {
                     if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
                         evals.push(evalGreenClaimRecord(item))
+                        leftHkeys = leftHkeys.filter(x => x != item.hkey)                        
                         latestYears[item.hkey] = item.report_year
                     }
-                })
-                
-                let greenAudits = await db.select("green_audits", filter)
-                latestYears = {}
-                greenAudits.forEach(item => {
-                    if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
-                        evals.push(evalGreenAuditRecord(item))
-                        latestYears[item.hkey] = item.report_year
-                    }
-                })
-    
-                let greenExcs = await db.select("green_exceptions", filter)
-                greenExcs.forEach(item => {
-                    evals.push(evalGreenExceptionRecord(item))
                 })
 
-                if (options && options.backfill) {
-                    let backfillProm = new Promise((resolve, reject) => {
-                        db.query(`SELECT * FROM green_hotels_backfill WHERE \`mode\` > 0 AND hkey IN (${leftHkeys})`, async (error, backfills, fields) => {
-                            if (error) {
-                                reject()
-                            } else {
-                                for (const [i, e] of Object.entries(backfills)) {
-                                    evals.push(evalGreenBackfillRecord(e))
-                                }
-                                resolve()
-                            }
-                        })
+                if (leftHkeys.length > 0) {
+                    filter = `WHERE hkey IN (${leftHkeys})`
+                    let greenAudits = await db.select("green_audits", filter)
+                    latestYears = {}
+                    greenAudits.forEach(item => {
+                        if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
+                            evals.push(evalGreenAuditRecord(item))
+                            leftHkeys = leftHkeys.filter(x => x != item.hkey)
+                            latestYears[item.hkey] = item.report_year
+                        }
                     })
-                    await backfillProm                    
                 }
     
-                Promise.all(evals).then(res => {
-                    for (const [i, e] of Object.entries(res)) {
-                        cacheGreenAuditRecord(e)
-                        records[e.hkey] = e
-                    }
-                    resolve(records)
+                if (leftHkeys.length > 0) {
+                    filter = `WHERE hkey IN (${leftHkeys})`
+                    let greenExcs = await db.select("green_exceptions", filter)
+                    greenExcs.forEach(item => {
+                        evals.push(evalGreenExceptionRecord(item))
+                        leftHkeys = leftHkeys.filter(x => x != item.hkey)
+                    })
+                }
+
+                if (leftHkeys.length > 0 && shall_backfill) {
+                    leftHkeys.forEach(hkey => {
+                        evals.push({hkey: hkey, type: "green_stay_not_available"})
+                    })
+                }
+    
+                let res = await Promise.all(evals)
+                
+                let backfillProms = []
+                res.forEach(e => {
+                    if (shall_backfill && !/green_stay_self_inspection/.test(e.type)) {
+                        backfillProms.push(new Promise((resolve5, reject5) => {
+                            db.query(`SELECT * FROM green_hotels_backfill WHERE \`mode\` > 0 AND hkey = ${e.hkey}`, async (error, backfill, fields) => {
+                                if (backfill.length > 0) {
+                                    let obj = await evalGreenBackfillRecord(backfill[0])
+                                    obj.original_type = e.type
+                                    records[e.hkey] = obj
+                                }
+                                resolve5()
+                            })
+                        }))         
+                    } else {
+                        records[e.hkey] = e  
+                    }              
                 })
+                await Promise.all(backfillProms)   
+                
+                Object.values(records).forEach(e => {
+                    cacheGreenAuditRecord(e, shall_backfill)  
+                })
+             
+                resolve(records)
             })
             
 
@@ -950,6 +1064,17 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
             }
         })
         proms.push(greenAuditRecordsFetch)   
+    } 
+
+    if (programs['gsi2']) { 
+        let gsi2AuditRecordsFetch = this.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, null, {bypass_cache: bypass_cache}).then((res) => {
+            for (let hkey of Object.keys(res)) {
+                let elem = res[hkey]
+                if (!audits[hkey]) audits[hkey] = []
+                audits[hkey].push(elem)
+            }
+        })
+        proms.push(gsi2AuditRecordsFetch)   
     } 
 
     let res = await Promise.all(proms)

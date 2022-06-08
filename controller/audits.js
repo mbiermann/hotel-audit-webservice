@@ -176,8 +176,9 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     let include = []
     if (!!req.query && !!req.query.include) include = req.query.include.split(',')
     if (include.length > 0) {
-        exclude = ['touchless','cleansafe','green','geosure','checkin'].filter(x => include.indexOf(x) === -1)
+        exclude = ['touchless','cleansafe','green','gsi2','geosure','checkin'].filter(x => include.indexOf(x) === -1)
     }
+    let customerId = req.query.customer_id    
 
     if (!!req.query && !!req.query.checkin_date) {
         if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.checkin_date))) {
@@ -188,17 +189,19 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     }
 
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
-    let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('bypass_cache' in req.query))
+    let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('true' == req.query.bypass_cache))
     let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys, {backfill: ("true" == req.query.backfill)})
+    let gsi2 = (exclude.includes('gsi2')) ? null : storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, customerId, {bypass_cache: ("true" == req.query.bypass_cache)})
     let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
     let checkin = (exclude.includes('checkin')) ? null : storage.getCheckinConfigsForHkeys(hkeys, checkinDate)
 
-    Promise.all([touchless, cleansafe, green, geosure, checkin]).then(async (result) => {
+    Promise.all([touchless, cleansafe, green, gsi2, geosure, checkin]).then(async (result) => {
         let _touchless = result[0]
         let _cleansafe = result[1]
         let _green = result[2]
-        let _geosure = result[3]
-        let _checkin = result[4]
+        let _gsi2 = result[3] 
+        let _geosure = result[4]
+        let _checkin = result[5]
 
         let data = {}
         let csTouchlessCheckin = new Set()
@@ -238,6 +241,14 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                 if (hkey in _green) {
                     if (!(hkey in data)) data[hkey] = []
                     let record = _green[hkey]
+                    delete record.hkey
+                    data[hkey].push(record)
+                }
+            }
+            if (!(exclude.includes('gsi2'))) {
+                if (hkey in _gsi2) {
+                    if (!(hkey in data)) data[hkey] = []
+                    let record = _gsi2[hkey]
                     delete record.hkey
                     data[hkey].push(record)
                 }

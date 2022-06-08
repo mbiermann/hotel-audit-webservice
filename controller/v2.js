@@ -1,6 +1,5 @@
 const express = require('express')
 const router = express.Router()
-const report = require('./reports')
 const audits = require('./audits')
 const check_ins = require('./check-ins')
 const magic_login = require('./magic-login')
@@ -20,7 +19,7 @@ router.get('/hotel-status', combinedAuthMiddleware, (req, resp) => {
     if (!req.query || !req.query.hkeys) return resp.status(500).json({ error: 'Missing hkeys' })
     const hkeys = req.query.hkeys.split(',').map((val) => Number(val))
     
-    storage.getHotelStatusByHkeys(hkeys, {green: true, clean: true}, false, true, ("true" == req.query.backfill)).then(statuses => {
+    storage.getHotelStatusByHkeys(hkeys, {green: true, gsi2: true, clean: true}, false, ('true' == req.query.bypass_cache), ("true" == req.query.backfill)).then(statuses => {
         resp.send(statuses)
     }).catch((err) => {
         console.log(err)
@@ -145,5 +144,4 @@ router.get('/gs_sticker/:type/:code', (req, resp) => {
         return resp.sendStatus(500)
     })
 })
-
 module.exports = router;
