@@ -324,6 +324,41 @@ router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
     })
 })
 
+router.get('/green/reports/SoC', combinedAuthMiddleware, async (req, resp) => {
+    storage.getHkeysForCustomer('SoC').then(hotels => {
+        const hkeys = hotels.map(x => x.hkey)
+        storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true}).then(res => {
+            let headers = []
+            let data = {}
+            hotels.forEach(x => {
+                data[x.hkey] = flatten({...x, ...res[x.hkey]}, {delimiter: "_"})
+                Object.keys(data[x.hkey]).forEach(h => {
+                    if (headers.indexOf(h) === -1) headers.push(h)
+                })
+            })
+            let out = []
+            out.push(headers)            
+            hkeys.forEach(x => {
+                let rec = []
+                if (x in data) {
+                    headers.forEach(h => rec.push(data[x][h]))
+                } else {
+                    headers.forEach(h => rec.push((h === 'hkey') ? x : null))
+                }
+                out.push(rec)
+            })   
+            var buffer = xlsx.build([{name: "report", data: out}])
+            resp.set('Content-Type', 'application/octet-stream')
+            resp.attachment(`Green Stay - Hotel Group Status Report - SoC.xlsx`)
+            resp.status(200).send(buffer)
+        }).catch(err => {
+            trackEvent('Audit Web Service', 'Green Audit Group Report Failure', "SoC")
+            logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
+            resp.status(500).json({ error: 'Server Error' })
+        })
+    })
+})
+
 router.get('/green/reports/:id', combinedAuthMiddleware, async (req, resp) => {
     storage.getGreenAuditForReportId(req.params.id).then(res => {
         resp.status(200).json(res)
