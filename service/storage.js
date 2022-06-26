@@ -690,6 +690,15 @@ exports.getHkeysForCustomer = (ref) => {
     })
 }
 
+let isGSI2TermsAccepted = (hkey) => {
+    return new Promise((resolve, reject) => {
+        db.query(`SELECT COUNT(*) as cnt FROM gsi2_responses_full_view WHERE hkey = ${hkey} AND question_id = 'GSI_TERMS_Q1' AND response = 1`, async (error, responses, fields) => {
+            if (responses[0].cnt === 0) return resolve(false)
+            return resolve(true)
+        })
+    })    
+}
+
 let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options) => {
     return new Promise(async (resolve, reject) => {
         let customerId = (targetCustomerId) ? targetCustomerId : 0
@@ -728,22 +737,33 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
         let proms = []
         
         leftHKeys.forEach(async hkey => {
-            proms.push(new Promise((resolve2, reject2) => {
-                db.query(`SELECT A.question_id, A.response FROM gsi2_responses A LEFT JOIN gsi2_reports B ON A.report_id = B._id WHERE B.hkey = ${hkey}`, async (error, responses, fields) => {
+            proms.push(new Promise(async (resolve2, reject2) => {
+                const cacheRec = (rec) => {
+                    cache.set(`gsi2:${customerId}:${hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL)
+                }
+                const notAvailableRec = {
+                    hkey: hkey,
+                    customerId: customerId,
+                    status: false,
+                    type: 'gsi2_not_available'
+                }
+                // Ignore the hotel's entry, if it did not accept GSI2 T&C
+                if (!await isGSI2TermsAccepted(hkey)) {
+                    cacheRec(notAvailableRec)
+                    return resolve2(notAvailableRec)
+                }
+                db.query(`SELECT question_id, response, category FROM gsi2_responses_full_view WHERE hkey = ${hkey} AND assessment IN (SELECT DISTINCT(assessment) as assessment FROM gsi2_level_assessments)`, async (error, responses, fields) => {
                     if (responses.length === 0) {
-                        let obj = {
-                            hkey: hkey,
-                            customerId: customerId,
-                            status: false,
-                            type: 'gsi2_not_available'
-                        }
-                        cache.set(`gsi2:${customerId}:${obj.hkey}`, JSON.stringify(obj), 'EX', process.env.REDIS_TTL);
-                        return resolve2(obj)
+                        cacheRec(notAvailableRec)
+                        return resolve2(notAvailableRec)
                     }
                     let points = 0
                     Object.keys(weights).forEach(k => {
                         let responseRec = responses.find(e => e.question_id == k)
-                        if (responseRec) points += parseFloat(responseRec.response) * weights[k].weight
+                        if (!!responseRec) { 
+                            let score = parseFloat(responseRec.response) * weights[k].weight
+                            if (responseRec) points += score
+                        }
                     })
                     let filter = `WHERE customer_id = ${customerId} AND ${points} >= \`min\` AND ${points} < \`max\``
                     let gradeQueryResult = await db.select("gsi2_customer_grading", filter)
@@ -761,6 +781,21 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             assessment_level: level,
                             status: true,
                             type: 'gsi2_self_inspection'
+                        }
+                        // Fill in the footprint, program and certification data
+                        let footprintAudit = await getGreenAuditRecordsForHkeys([hkey])
+                        footprintAudit = footprintAudit[hkey]
+                        rec.program = footprintAudit.program
+                        rec.cert = footprintAudit.cert
+                        if (['green_stay_self_inspection','green_stay_self_inspection_hero'].indexOf(footprintAudit.type) > -1) {
+                            // Fill in the footprint data if the hotel has Advanced or Pro Level assessments completed
+                            if (['ADV_LEVEL','PRO_LEVEL'].indexOf(level) > -1) {
+                                const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
+                                fields.forEach(x => {
+                                    if (!('footprint' in rec)) rec.footprint = {}
+                                    rec.footprint[x] = footprintAudit[x]
+                                })
+                            }
                         }
                         cacheGSI2AuditRecord(customerId, rec)
                         resolve2(rec)
