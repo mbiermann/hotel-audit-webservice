@@ -690,19 +690,9 @@ exports.getHkeysForCustomer = (ref) => {
     })
 }
 
-let isGSI2TermsAccepted = (hkey) => {
-    return new Promise((resolve, reject) => {
-        db.query(`SELECT COUNT(*) as cnt FROM gsi2_responses_full_view WHERE hkey = ${hkey} AND question_id = 'GSI_TERMS_Q1' AND response = 1`, async (error, responses, fields) => {
-            if (responses[0].cnt === 0) return resolve(false)
-            return resolve(true)
-        })
-    })    
-}
-
 let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options) => {
     return new Promise(async (resolve, reject) => {
         let customerId = (targetCustomerId) ? targetCustomerId : 0
-
         let cacheProms = []
         if (!options  || !('bypass_cache' in options) || options.bypass_cache === false) {
             for (let hkey of hkeys) {
@@ -716,69 +706,80 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
             if (!!item.obj) res[item.hkey] = item.obj
             return res
         }, {})
-
         const leftHKeys = hkeys.filter(hkey => !(hkey in cacheResults))
+        if (leftHKeys.length === 0) return resolve(cacheResults)
 
-        let respond = (dbResultsFinal, cachedResultsFinal) => {
-            Object.assign(dbResultsFinal, cachedResultsFinal)
-            resolve(dbResultsFinal)
+        const getHotelLeastLevelCompletedAndAssessmentsForHkey = (hkey) => {
+            return new Promise((resolve, reject) => {
+                db.query(`SELECT A.\`_id\` AS \`level\`, CONCAT("'", GROUP_CONCAT(B.assessment SEPARATOR "','"), "'") AS assessments FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 0,1) GROUP BY A._id`, 
+                    async (err2, res2, flds2) => {
+                        if (res2.length === 0) return resolve({level: "NONE", assessments: null})
+                        return resolve({level: res2[0].level, assessments: res2[0].assessments})
+                    })
+            })
         }
-        if (leftHKeys.length === 0) return respond({}, cacheResults)
-
-        let filter = `WHERE customer_id = ${customerId}`
-        let weights = await db.select("gsi2_customer_question_weights", filter)
-        
-        if (weights.length === 0) return resp.status(500).json({error: `Weights for customer ${customerId} not (completely) configured.`})
-        weights = weights.reduce((res, item, idx, arr) => {
-            res[item.question_id] = item
-            return res
-        }, {})
-
+        let _customerScoreScale = null
+        const getCustomerScoreScale = async (_customerId) => {
+            if (!!_customerScoreScale) return _customerScoreScale
+            _customerScoreScale = await db.select("gsi2_customer_grading", `WHERE customer_id = ${_customerId}`)
+            return _customerScoreScale
+        }
+        let _customerDisplayConfig = null
+        const getCustomerDisplayConfig = async (_customerId) => {
+            if (!!_customerDisplayConfig) return _customerDisplayConfig
+            const __customerDisplayConfig = await db.select("gsi2_customer_display_config", `WHERE customer_id = ${_customerId}`)
+            _customerDisplayConfig = __customerDisplayConfig.map(x => x.display_rule)
+            return _customerDisplayConfig
+        }
         let proms = []
         
         leftHKeys.forEach(async hkey => {
             proms.push(new Promise(async (resolve2, reject2) => {
-                const cacheRec = (rec) => {
-                    cache.set(`gsi2:${customerId}:${hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL)
-                }
-                const notAvailableRec = {
-                    hkey: hkey,
-                    customerId: customerId,
-                    status: false,
-                    type: 'gsi2_not_available'
-                }
-                // Ignore the hotel's entry, if it did not accept GSI2 T&C
-                if (!await isGSI2TermsAccepted(hkey)) {
-                    cacheRec(notAvailableRec)
-                    return resolve2(notAvailableRec)
-                }
-                db.query(`SELECT question_id, response, category FROM gsi2_responses_full_view WHERE hkey = ${hkey} AND assessment IN (SELECT DISTINCT(assessment) as assessment FROM gsi2_level_assessments)`, async (error, responses, fields) => {
-                    if (responses.length === 0) {
+                try {
+                    const cacheRec = (rec) => {
+                        cache.set(`gsi2:${customerId}:${hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL)
+                    }
+                    const notAvailableRec = {
+                        hkey: hkey,
+                        status: false,
+                        type: 'gsi2_not_available'
+                    }
+                    
+                    let obj = await getHotelLeastLevelCompletedAndAssessmentsForHkey(hkey)
+                    
+                    if (obj.level === "NONE") {
                         cacheRec(notAvailableRec)
                         return resolve2(notAvailableRec)
                     }
-                    let points = 0
-                    Object.keys(weights).forEach(k => {
-                        let responseRec = responses.find(e => e.question_id == k)
-                        if (!!responseRec) { 
-                            let score = parseFloat(responseRec.response) * weights[k].weight
-                            if (responseRec) points += score
+                    db.query(`SELECT * FROM gsi2_responses_customer_weighted WHERE hkey = ${hkey} AND customer_id = (SELECT MAX(customer_id) AS customer_id FROM gsi2_responses_customer_weighted WHERE customer_id IN (0,${customerId}) LIMIT 1) AND assessment IN (${obj.assessments})`, async (error, responses, fields) => {
+                        if (responses.length === 0) {
+                            cacheRec(notAvailableRec)
+                            return resolve2(notAvailableRec)
                         }
-                    })
-                    let filter = `WHERE customer_id = ${customerId} AND ${points} >= \`min\` AND ${points} < \`max\``
-                    let gradeQueryResult = await db.select("gsi2_customer_grading", filter)
-                    if (gradeQueryResult.length === 0) reject({error: `Grades for customer ${customerId} not (completely) configured.`})
-                    db.query(`SELECT \`_id\`, \`rank\` FROM gsi2_levels WHERE _id NOT IN (\
-                        SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (\
-                            SELECT A.assessment FROM gsi2_level_assessments A LEFT JOIN gsi2_reports B ON A.assessment = B.assessment \
-                            WHERE A.required = 1 AND B.hkey = ${hkey})) ORDER BY \`rank\` desc limit 0,1`, 
-                    async (err2, res2, flds2) => {
-                        let level = (res2.length === 0) ? "NONE" : res2[0]._id
+                        
+                        const customerIdActual = responses[0].customer_id
+                        let achievePerCategory = {}
+                        let points = 0
+                        responses.forEach(r => {
+                            if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
+                            achievePerCategory[r.category].total += r.weight
+                            let score = parseFloat(r.response) * r.weight
+                            achievePerCategory[r.category].score += score
+                            points += score
+                        })
+                        Object.keys(achievePerCategory).map((key, index) => {
+                            achievePerCategory[key] = achievePerCategory[key].score / achievePerCategory[key].total
+                        })
+                        
+                        const customerScoreScale = await getCustomerScoreScale(customerIdActual)
+                        let grade = customerScoreScale.find(x => points > x.min && points < x.max).grade
                         const rec = {
                             hkey: hkey,
-                            customerId: customerId,
-                            grade: gradeQueryResult[0].grade,
-                            assessment_level: level,
+                            customerId: customerIdActual,
+                            displayRules: await getCustomerDisplayConfig(customerIdActual),
+                            score: grade,
+                            assessment_level: obj.level,
+                            achievement: achievePerCategory,
                             status: true,
                             type: 'gsi2_self_inspection'
                         }
@@ -789,7 +790,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         rec.cert = footprintAudit.cert
                         if (['green_stay_self_inspection','green_stay_self_inspection_hero'].indexOf(footprintAudit.type) > -1) {
                             // Fill in the footprint data if the hotel has Advanced or Pro Level assessments completed
-                            if (['ADV_LEVEL','PRO_LEVEL'].indexOf(level) > -1) {
+                            if (['ADV_LEVEL','PRO_LEVEL'].indexOf(obj.level) > -1) {
                                 const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
                                 fields.forEach(x => {
                                     if (!('footprint' in rec)) rec.footprint = {}
@@ -798,17 +799,24 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             }
                         }
                         cacheGSI2AuditRecord(customerId, rec)
-                        resolve2(rec)
-                    })                
-                })
+                        resolve2(rec)             
+                    })
+                } catch (e) {
+                    console.log(`Error processing GSI2 evaluation for hkey ${hkey} and customer ID ${customerId}`, e)
+                    resolve2({
+                        status: false,
+                        type: "gsi2_server_error"
+                    })
+                }
             }))        
         })
         Promise.all(proms).then(dbResults => {
             let results = dbResults.reduce((res, item, idx, arr) => {
                 if (!!item) res[item.hkey] = item
                 return res
-            }, {})   
-            respond(results, cacheResults)
+            }, {})
+            Object.assign(results, cacheResults)
+            resolve(results)
         }).catch(reject)
     })
 }
