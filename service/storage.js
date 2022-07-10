@@ -168,7 +168,7 @@ let evalGreenBackfillRecord = async (i) => {
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
     i.wasteClass = (i.kgWastePOC > -1) ? benchmarkWasteProduction(i.kgWastePOC) : 'D'
     i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
-    i.status = false
+    i.status = true
     i.type = `green_stay_backfill_mode_${i.mode}`
     return new GreenStayAuditRecord(i)
 }
