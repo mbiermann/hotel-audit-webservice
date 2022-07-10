@@ -29,7 +29,7 @@ class GreenStayAuditRecord {
                 this.status = false
             } else {
                 this.type = "green_stay_self_inspection"
-                if (auditData.greenClass === "A") this.type = `${this.type}_hero`
+                if (["A","B"].indexOf(auditData.greenClass) > -1) this.type = `${this.type}_hero`
                 this.status = true
             }
         } else {
