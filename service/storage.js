@@ -739,19 +739,59 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                     const cacheRec = (rec) => {
                         cache.set(`gsi2:${customerId}:${hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL)
                     }
+                    let rec = {}
                     const notAvailableRec = {
                         hkey: hkey,
                         status: false,
                         type: 'gsi2_not_available'
                     }
-                    
+
                     let obj = await getHotelLeastLevelCompletedAndAssessmentsForHkey(hkey)
-                    
+
+                    // Fill in the footprint, program and certification data
+                    let footprintAudit = await getGreenAuditRecordsForHkeys([hkey])
+                    footprintAudit = footprintAudit[hkey]
+                    if (footprintAudit) {
+                        rec.program = footprintAudit.program
+                        rec.cert = footprintAudit.cert
+                        if (['green_stay_self_inspection','green_stay_self_inspection_hero'].indexOf(footprintAudit.type) > -1) {
+                            const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
+                            fields.forEach(x => {
+                                if (!('footprint' in rec)) rec.footprint = {}
+                                rec.footprint[x] = footprintAudit[x]
+                            })
+                        }          
+                    }      
+
+                    let migrationMode = false
                     if (obj.level === "NONE") {
-                        cacheRec(notAvailableRec)
-                        return resolve2(notAvailableRec)
+                        // During migration grace period from GSI1 overwrite to Advanced level
+                        if (rec.footprint) {
+                            migrationMode = true
+                            obj.level = 'ADV_LEVEL'
+                            obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
+                        } else {
+                            cacheRec(notAvailableRec)
+                            return resolve2(notAvailableRec)
+                        }
                     }
-                    db.query(`SELECT * FROM gsi2_responses_customer_weighted WHERE hkey = ${hkey} AND customer_id = (SELECT MAX(customer_id) AS customer_id FROM gsi2_responses_customer_weighted WHERE customer_id IN (0,${customerId}) LIMIT 1) AND assessment IN (${obj.assessments})`, async (error, responses, fields) => {
+
+                    let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.customer_id
+                        FROM gsi2_level_assessments A
+                        LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
+                        LEFT JOIN gsi2_customer_question_weights C ON B.question_id = C.question_id
+                        LEFT JOIN gsi2_questions D ON C.question_id = D._id
+                        LEFT JOIN (SELECT * FROM gsi2_responses_full_view WHERE hkey = ${hkey}) E ON C.question_id = E.question_id
+                        WHERE A.\`level\` = '${obj.level}' AND C.weight IS NOT NULL AND C.customer_id = (
+                        SELECT MAX(customer_id) AS customer_id
+                        FROM gsi2_customer_question_weights
+                        WHERE customer_id IN (0,${customerId})
+                        LIMIT 1)`
+
+                    // When in migration mode from GSI1 then only rate what is there (footprint)
+                    if (migrationMode) query = `SELECT * FROM gsi2_responses_customer_weighted WHERE hkey = ${hkey} AND customer_id = (SELECT MAX(customer_id) AS customer_id FROM gsi2_responses_customer_weighted WHERE customer_id IN (0,${customerId}) LIMIT 1) AND assessment IN (${obj.assessments})`
+                    
+                    db.query(query, async (error, responses, fields) => {
                         if (responses.length === 0) {
                             cacheRec(notAvailableRec)
                             return resolve2(notAvailableRec)
@@ -760,44 +800,49 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         const customerIdActual = responses[0].customer_id
                         let achievePerCategory = {}
                         let points = 0
+                        let maxPoints = 0
                         responses.forEach(r => {
-                            if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
-                            achievePerCategory[r.category].total += r.weight
-                            let score = parseFloat(r.response) * r.weight
-                            achievePerCategory[r.category].score += score
-                            points += score
+                            if (r.weight > 0) {
+                                if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
+                                achievePerCategory[r.category].total += r.weight
+                                let score = parseFloat(r.response) * r.weight
+                                achievePerCategory[r.category].score += score
+                                points += score
+                                maxPoints += r.weight
+                            }
                         })
                         Object.keys(achievePerCategory).map((key, index) => {
                             achievePerCategory[key] = achievePerCategory[key].score / achievePerCategory[key].total
                         })
                         
                         const customerScoreScale = await getCustomerScoreScale(customerIdActual)
-                        let grade = customerScoreScale.find(x => points > x.min && points < x.max).grade
-                        const rec = {
+                        let grade = customerScoreScale.find(x => points >= x.min && points <= x.max).grade
+
+                        // Override proportionally to max score for GSI1 migration period
+                        if (migrationMode) {
+                            const maxScorePoints = customerScoreScale.reduce((element,max) => element.max > max ? element.max : max).max
+                            let tweakPoints = points * (maxScorePoints/maxPoints)
+                            grade = customerScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
+                        }
+
+                        // Pack response
+                        Object.assign(rec, {
                             hkey: hkey,
                             customerId: customerIdActual,
                             displayRules: await getCustomerDisplayConfig(customerIdActual),
-                            score: grade,
                             assessment_level: obj.level,
-                            achievement: achievePerCategory,
+                            scoring: {
+                                score: grade,
+                                categories: achievePerCategory,
+                                points: {
+                                    is: points,
+                                    max: maxPoints,
+                                    percent: points/maxPoints
+                                }
+                            },
                             status: true,
                             type: 'gsi2_self_inspection'
-                        }
-                        // Fill in the footprint, program and certification data
-                        let footprintAudit = await getGreenAuditRecordsForHkeys([hkey])
-                        footprintAudit = footprintAudit[hkey]
-                        rec.program = footprintAudit.program
-                        rec.cert = footprintAudit.cert
-                        if (['green_stay_self_inspection','green_stay_self_inspection_hero'].indexOf(footprintAudit.type) > -1) {
-                            // Fill in the footprint data if the hotel has Advanced or Pro Level assessments completed
-                            if (['ADV_LEVEL','PRO_LEVEL'].indexOf(obj.level) > -1) {
-                                const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
-                                fields.forEach(x => {
-                                    if (!('footprint' in rec)) rec.footprint = {}
-                                    rec.footprint[x] = footprintAudit[x]
-                                })
-                            }
-                        }
+                        })
                         cacheGSI2AuditRecord(customerId, rec)
                         resolve2(rec)             
                     })
