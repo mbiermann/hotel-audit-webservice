@@ -1076,7 +1076,7 @@ const getCachedGeosureRecordsForHkeys = (hkeys) => {
     })   
 }
 
-exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cache = false, backfill = false, bypass_redirect_mapping = false, exclude = []) => {
+exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cache = false, backfill = false, bypass_redirect_mapping = false, exclude = [], customerId = 0) => {
     let filter = ''
     filter = `WHERE hkey IN (${hkeys})`
 
@@ -1164,7 +1164,7 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
     } 
 
     if (programs['gsi2']) { 
-        let gsi2AuditRecordsFetch = this.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, null, {bypass_cache: bypass_cache}).then((res) => {
+        let gsi2AuditRecordsFetch = this.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, customerId, {bypass_cache: bypass_cache}).then((res) => {
             for (let hkey of Object.keys(res)) {
                 let elem = res[hkey]
                 if (!audits[hkey]) audits[hkey] = []
