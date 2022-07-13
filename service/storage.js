@@ -455,7 +455,7 @@ let evalGreenExceptionRecord = (i) => {
         if (cert) rec.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
         rec.type = "green_stay_not_applicable"
         // Only pass exceptions when older than begin of latest report year
-        let latestReportYear = 2019
+        let latestReportYear = 2021
         rec.status = (i.opening_date >= new Date(latestReportYear, 0))
         resolve(rec)
     })
@@ -881,71 +881,65 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
             let filter = `WHERE hkey IN (${leftHkeys})`
             
             //let greenClaims = await db.select("green_footprint_claims", filter)
-            await db.query(`SELECT A.*, B.chain_id FROM green_footprint_claims A LEFT JOIN hotels B ON A.hkey = B.hkey WHERE A.hkey IN (${leftHkeys})`, async (error, greenClaims, fields) => {
+            await db.query(`SELECT C.* FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_footprint_claims B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_footprint_claims A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey AND C.report_year = D.report_year`, async (error, greenClaims, fields) => {
                 let evals = []
-                let latestYears = {}
                 greenClaims.forEach(item => {
-                    if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
-                        evals.push(evalGreenClaimRecord(item))
-                        leftHkeys = leftHkeys.filter(x => x != item.hkey)                        
-                        latestYears[item.hkey] = item.report_year
-                    }
+                    evals.push(evalGreenClaimRecord(item))
+                    leftHkeys = leftHkeys.filter(x => x != item.hkey)    
                 })
 
+                let complete = async () => {
+                    if (leftHkeys.length > 0) {
+                        filter = `WHERE hkey IN (${leftHkeys})`
+                        let greenExcs = await db.select("green_exceptions", filter)
+                        greenExcs.forEach(item => {
+                            evals.push(evalGreenExceptionRecord(item))
+                            leftHkeys = leftHkeys.filter(x => x != item.hkey)
+                        })
+                    }
+    
+                    if (leftHkeys.length > 0 && shall_backfill) {
+                        leftHkeys.forEach(hkey => {
+                            evals.push({hkey: hkey, type: "green_stay_not_available"})
+                        })
+                    }
+        
+                    let res = await Promise.all(evals)
+                    
+                    let backfillProms = []
+                    res.forEach(e => {
+                        if (shall_backfill && !/green_stay_self_inspection/.test(e.type)) {
+                            backfillProms.push(new Promise((resolve5, reject5) => {
+                                db.query(`SELECT * FROM green_hotels_backfill WHERE \`mode\` > 0 AND hkey = ${e.hkey}`, async (error, backfill, fields) => {
+                                    if (backfill.length > 0) {
+                                        let obj = await evalGreenBackfillRecord(backfill[0])
+                                        obj.original_type = e.type
+                                        records[e.hkey] = obj
+                                    }
+                                    resolve5()
+                                })
+                            }))         
+                        } else {
+                            records[e.hkey] = e  
+                        }              
+                    })
+                    await Promise.all(backfillProms) 
+                    Object.values(records).forEach(e => {
+                        cacheGreenAuditRecord(e, shall_backfill)  
+                    })
+                    resolve(records)
+                }
+
                 if (leftHkeys.length > 0) {
-                    filter = `WHERE hkey IN (${leftHkeys})`
-                    let greenAudits = await db.select("green_audits", filter)
-                    latestYears = {}
-                    greenAudits.forEach(item => {
-                        if (!latestYears[item.hkey] || item.report_year > latestYears[item.hkey]) {
+                    await db.query(`SELECT C.* FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_audits B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_audits A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_audits C ON C.hkey = D.hkey AND C.report_year = D.report_year`, async (error2, greenAudits, fields2) => {
+                        greenAudits.forEach(item => {
                             evals.push(evalGreenAuditRecord(item))
                             leftHkeys = leftHkeys.filter(x => x != item.hkey)
-                            latestYears[item.hkey] = item.report_year
-                        }
+                        })
+                        complete()
                     })
                 }
-    
-                if (leftHkeys.length > 0) {
-                    filter = `WHERE hkey IN (${leftHkeys})`
-                    let greenExcs = await db.select("green_exceptions", filter)
-                    greenExcs.forEach(item => {
-                        evals.push(evalGreenExceptionRecord(item))
-                        leftHkeys = leftHkeys.filter(x => x != item.hkey)
-                    })
-                }
-
-                if (leftHkeys.length > 0 && shall_backfill) {
-                    leftHkeys.forEach(hkey => {
-                        evals.push({hkey: hkey, type: "green_stay_not_available"})
-                    })
-                }
-    
-                let res = await Promise.all(evals)
-                
-                let backfillProms = []
-                res.forEach(e => {
-                    if (shall_backfill && !/green_stay_self_inspection/.test(e.type)) {
-                        backfillProms.push(new Promise((resolve5, reject5) => {
-                            db.query(`SELECT * FROM green_hotels_backfill WHERE \`mode\` > 0 AND hkey = ${e.hkey}`, async (error, backfill, fields) => {
-                                if (backfill.length > 0) {
-                                    let obj = await evalGreenBackfillRecord(backfill[0])
-                                    obj.original_type = e.type
-                                    records[e.hkey] = obj
-                                }
-                                resolve5()
-                            })
-                        }))         
-                    } else {
-                        records[e.hkey] = e  
-                    }              
-                })
-                await Promise.all(backfillProms)   
-                
-                Object.values(records).forEach(e => {
-                    cacheGreenAuditRecord(e, shall_backfill)  
-                })
-             
-                resolve(records)
+                complete()
             })
             
 
@@ -971,39 +965,6 @@ exports.getGeosureRecordsForHkeys = (hkeys, options) => {
             return Promise.all(evals).then(res => {
                 res.forEach(e => {
                     cacheGeosureRecordForHkey(e.hkey, e)
-                    records[e.hkey] = e
-                })
-                resolve(records)
-            })
-            
-        } catch (err) {
-            reject(err)
-        }
-    })
-}
-
-exports.getGreenExceptionRecordsForHkeys = (hkeys, options) => {
-    return new Promise(async (resolve, reject) => {
-        try {
-            hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
-            if (hkeys.length === 0) return resolve([])
-            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenExceptionRecordsForHkeys(hkeys))
-            const hkeysFromCache = Object.keys(records).map(e => Number(e))
-            let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
-            if (leftHkeys.length === 0) return resolve(records)
-            let filter = `WHERE hkey IN (${leftHkeys})`
-            let greenExcs = await db.select("green_exceptions", filter)
-            let evals = []
-            let latestReportYear = 2019
-            greenExcs.forEach(item => {
-                // Only pass exceptions when younger than begin of latest report year
-                if (item.opening_date < new Date(latestReportYear+1, 0)) {
-                    evals.push(evalGreenExceptionRecord(item))
-                }
-            })
-            return Promise.all(evals).then(res => {
-                res.forEach(e => {
-                    cacheGreenExceptionRecordForHkey(e.hkey, e)
                     records[e.hkey] = e
                 })
                 resolve(records)
@@ -1239,7 +1200,7 @@ exports.getGreenExceptionsReport = (where, offset, size) => {
         db.query(`SELECT * FROM green_exceptions ${where} ORDER BY _id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
             db.query(`SELECT COUNT(*) as 'count' FROM green_exceptions ${where}`, [], (snd) => {
                 let proms = []
-                let latestReportYear = 2019
+                let latestReportYear = 2021
                 for (let item of fst) {
                     if (item.opening_date < new Date(latestReportYear+1, 0)) {
                         proms.push(evalGreenExceptionRecord(item))
