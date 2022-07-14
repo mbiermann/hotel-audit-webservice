@@ -816,23 +816,34 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         rec.programs = footprintAudit.programs
                         rec.certs = footprintAudit.certs
                         rec.status = footprintAudit.status
-                        rec.type = /green_stay_self_inspection/.test(footprintAudit.type) ? 'gsi2_self_inspection' : footprintAudit.type.replace('green_stay', 'gsi2')
                     }
 
                     let migrationMode = false
-                    
+                    let outInner = {}
+                    let complete = () => {
+                        // Pack response
+                        let out = Object.assign({hkey: hkey}, outInner, rec)
+                        cacheGSI2AuditRecord(customerId, out)
+                        resolve2(out)    
+                    }
+
                     if (obj.level === "NONE") {
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (rec.footprint) {
-                            migrationMode = true
-                            obj.level = 'ADV_LEVEL'
-                            obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
+                            if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
+                                migrationMode = true
+                                obj.level = 'ADV_LEVEL'
+                                obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
+                            } else { // Otherwise when no assessment/level was completed and footprint was not successful
+                                rec.type = `gsi2_not_available`
+                                rec.status = false
+                                return complete()
+                            }
                         } else {
                             return returnNotAvailable()
                         }
                     }
                     
-                    let queryType = 1
                     let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.customer_id
                         FROM gsi2_level_assessments A
                         LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
@@ -852,14 +863,10 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             SELECT MAX(customer_id) AS customer_id FROM gsi2_customer_question_weights WHERE customer_id IN (0,${customerId}) LIMIT 1
                         ) 
                         AND assessment IN (${obj.assessments})`
-                        queryType = 2
                     }
-
-                    let startTime = new Date()
                     
                     db.query(query, async (error, responses, fields) => {
                         
-                        let outInner = {}
                         if (responses.length > 0) {
                             const customerIdActual = responses[0].customer_id
                             let customerScoreScale = await getCustomerScoreScale(customerIdActual)
@@ -895,9 +902,6 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                                 grade = customerScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
                             }
 
-                            rec.type = `gsi2_self_inspection`
-                            rec.status = true
-
                             outInner = {
                                 customerId: customerIdActual,
                                 displayRules: await getCustomerDisplayConfig(customerIdActual),
@@ -912,12 +916,12 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                                     }
                                 }
                             }
+
+                            rec.type = `gsi2_self_inspection`
+                            rec.status = true
                         }
 
-                        // Pack response
-                        let out = Object.assign({hkey: hkey}, outInner, rec)
-                        cacheGSI2AuditRecord(customerId, out)
-                        resolve2(out)             
+                        complete()         
                     })
                 } catch (e) {
                     let msg = `Error processing GSI2 evaluation for hkey ${hkey} and customer ID ${customerId}: ${e}`
