@@ -4,6 +4,8 @@ const db = require('../client/database')
 const cloudStorage = require('../client/cloud-storage')
 const flatten = require('flat')
 const logger = require('../utils/logger')
+const safeStringify = require('json-stable-stringify')
+const SHA256 = require("crypto-js/sha256")
 const {GreenStayAuditRecord} = require('../model/green')
 
 const classes = ['A','B','C','D']
@@ -173,9 +175,16 @@ let evalGreenBackfillRecord = async (i) => {
     return new GreenStayAuditRecord(i)
 }
 
-let evalGreenClaimRecord = async (i) => {
-    i.program = await getProgram(i.hkey)
-    i.cert = await getLastCertificate(i.hkey)
+let evalGreenClaimRecord = async (i, full_certs_and_programs = false) => {
+    if (full_certs_and_programs) { // GSI1
+        let programs = await getPrograms(i.hkey)
+        i.programs = programs.length > 0 ? programs : null
+        let certs = await getValidCertificates(i.hkey)
+        i.certs = certs.length > 0 ? certs : null
+    } else { // GSI2
+        i.program = await getProgram(i.hkey)
+        i.cert = await getLastCertificate(i.hkey)
+    }
     i.kgCo2ePOC = i.kgCo2ePor
     if (i.kgCo2ePOC > 300) {
         _addAnomaly(i, ANOMALIES.CARBON_EMISSION_TOO_HIGH, "Carbon emission per occupied room", i.kgCo2ePOC)
@@ -218,6 +227,7 @@ const ANOMALIES = {
     PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND: "PRIVATE_COND_SPACE_LARGER_OR_EQUAL_TOTAL_COND",
     TOTAL_WATER_TOO_LOW: "TOTAL_WATER_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
+    NET_WATER_CONSUMPTION_TOO_HIGH: "NET_WATER_CONSUMPTION_TOO_HIGH",
     CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH",
     LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH: "LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH",
     OCCUPANCY_TOO_LOW: "OCCUPANCY_TOO_LOW",
@@ -233,7 +243,7 @@ const _addAnomaly = (item, anomalyType, metric, value) => {
     })
 }
 
-let evalGreenAuditRecord = (i) => {
+let evalGreenAuditRecord = (i, full_certs_and_programs = false) => {
     return new Promise((resolve, reject) => {
 
         getGreenhouseGasFactors(i).then(async factors => {
@@ -312,6 +322,9 @@ let evalGreenAuditRecord = (i) => {
                 if (i.lH2OPOC < 10) {
                     _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_LOW, "Liters of water per occupied room", i.lH2OPOC)
                 }
+                if (i.lH2OPOC > 4000) {
+                    _addAnomaly(i, ANOMALIES.NET_WATER_CONSUMPTION_TOO_HIGH, "Liters of water per occupied room", i.lH2OPOC)
+                }
                 i.waterClass = benchmarkWaterConsumption(i.lH2OPOC)
             }
             
@@ -373,9 +386,16 @@ let evalGreenAuditRecord = (i) => {
 
             i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
 
-            i.program = await getProgram(i.hkey)
-            i.cert = await getLastCertificate(i.hkey)
-            
+            if (full_certs_and_programs) { // GSI1
+                let programs = await getPrograms(i.hkey)
+                i.programs = programs.length > 0 ? programs : null
+                let certs = await getValidCertificates(i.hkey)
+                i.certs = certs.length > 0 ? certs : null
+            } else { // GSI2
+                i.program = await getProgram(i.hkey)
+                i.cert = await getLastCertificate(i.hkey)
+            }
+
             let rec = new GreenStayAuditRecord(i)
             resolve(rec)
         })
@@ -418,7 +438,7 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
 }
 
 let benchmarkWaterConsumption = (lH2OPOC) => {
-    let waterThresholds = [150,300,600,800] // Based on https://www.sciencedirect.com/science/article/abs/pii/S026151771400137X?via%3Dihub, https://www.mdpi.com/2071-1050/11/23/6880/pdf
+    let waterThresholds = [200,700,1100] // Based on Cornell HWMI Index 2021, https://www.sciencedirect.com/science/article/abs/pii/S026151771400137X?via%3Dihub, https://www.mdpi.com/2071-1050/11/23/6880/pdf
     let waterClass = 'D'
     for (let i = 0; i < waterThresholds.length; i++) {
         if (lH2OPOC <= waterThresholds[i]) {
@@ -474,11 +494,23 @@ const getProgram = async (hkey) => {
     return res[0]
 }
 
+const getPrograms = async (hkey) => {
+    let res = await db.select("green_programs", `WHERE hkey = '${hkey}'`)
+    return res
+}
+exports.getPrograms = getPrograms
+
 const getLastCertificate = async (hkey) => {
     let res = await db.select('green_certificates', `WHERE hkey = ${hkey}`, '*', 'ORDER BY validity_end DESC', 0, 1)
     return res[0]
 }
 exports.getLastCertificate = getLastCertificate
+
+const getValidCertificates = async (hkey) => {
+    let res = await db.select('green_certificates', `WHERE hkey = ${hkey} AND validity_end >= NOW()`)
+    return res
+}
+exports.getValidCertificates = getValidCertificates
 
 const cacheAuditRecordForHkey = (hkey, elem) => {
     let key = crypto.createHash('md5').update(JSON.stringify(elem)).digest('hex')
@@ -487,8 +519,8 @@ const cacheAuditRecordForHkey = (hkey, elem) => {
     cache.expire(hkey, process.env.REDIS_TTL)
 }
 
-const cacheGreenAuditRecord = (elem, shall_backfill) => {
-    cache.set(`green:${elem.hkey}:${shall_backfill}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+const cacheGreenAuditRecord = (elem, filter) => {
+    cache.set(`green:${elem.hkey}:${filter}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
 const cacheGSI2AuditRecord = (customerId, rec) => {
@@ -513,13 +545,13 @@ const getCachedGSI2AuditRecordForHkeyAndCustomerId = (hkey, customerId) => {
     })
 }
 
-const getCachedGreenAuditRecordsForHkeys = (hkeys, shall_backfill) => {
+const getCachedGreenAuditRecordsForHkeys = (hkeys, filter) => {
     return new Promise((resolve, reject) => {
         let data = {}
         let proms = []
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
-                cache.get(`green:${hkey}:${shall_backfill}`, (err, obj) => {
+                cache.get(`green:${hkey}:${filter}`, (err, obj) => {
                     if (!!obj) data[hkey] = JSON.parse(obj)
                     resolve1()
                 })
@@ -673,10 +705,16 @@ exports.getAllHotelsWithGreenRecord = () => {
         proms.push(getHotelsWithGreenClaim())
         proms.push(getHotelsWithGreenAudit())
         proms.push(getHotelsWithGreenException())
+        proms.push(getHotelsWithGreenProgram())
+        proms.push(getHotelsWithGreenCert())
+        proms.push(getHotelsWithGSI2Report())
         let hotels = []
         Promise.all(proms).then(res => {
-            hotels.push(...res[0], ...res[1], ...res[2])
-            resolve(hotels)
+            res.forEach(r => hotels.push(...r))
+            let uniqueHotels = hotels.filter((item, pos) => {
+                return hotels.findIndex(x => x.hkey === item.hkey) == pos;
+            })
+            resolve(uniqueHotels)
         })
     })
 }
@@ -709,23 +747,23 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
         const leftHKeys = hkeys.filter(hkey => !(hkey in cacheResults))
         if (leftHKeys.length === 0) return resolve(cacheResults)
 
-        const getHotelLeastLevelCompletedAndAssessmentsForHkey = (hkey) => {
+        const getHotelLeastLevelCompletedForHkey = (hkey) => {
             return new Promise((resolve, reject) => {
-                db.query(`SELECT A.\`_id\` AS \`level\`, CONCAT("'", GROUP_CONCAT(B.assessment SEPARATOR "','"), "'") AS assessments FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 0,1) GROUP BY A._id`, 
-                    async (err2, res2, flds2) => {
-                        if (res2.length === 0) return resolve({level: "NONE", assessments: null})
-                        return resolve({level: res2[0].level, assessments: res2[0].assessments})
+                db.query(`SELECT A.\`_id\` AS \`level\` FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 1) GROUP BY A._id`, 
+                    async (err2, res2, flds2) => {                        
+                        if (res2.length === 0) return resolve({level: "NONE"})
+                        return resolve({level: res2[0].level})
                     })
             })
         }
         let _customerScoreScale = null
-        const getCustomerScoreScale = async (_customerId) => {
+        let getCustomerScoreScale = async (_customerId) => {
             if (!!_customerScoreScale) return _customerScoreScale
             _customerScoreScale = await db.select("gsi2_customer_grading", `WHERE customer_id = ${_customerId}`)
             return _customerScoreScale
         }
         let _customerDisplayConfig = null
-        const getCustomerDisplayConfig = async (_customerId) => {
+        let getCustomerDisplayConfig = async (_customerId) => {
             if (!!_customerDisplayConfig) return _customerDisplayConfig
             const __customerDisplayConfig = await db.select("gsi2_customer_display_config", `WHERE customer_id = ${_customerId}`)
             _customerDisplayConfig = __customerDisplayConfig.map(x => x.display_rule)
@@ -733,6 +771,9 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
         }
         let proms = []
         
+        // Fill in the footprint, program and certification data
+        let footprintAudits = await getGreenAuditRecordsForHkeys(leftHKeys, {full_certs_and_programs: true})
+
         leftHKeys.forEach(async hkey => {
             proms.push(new Promise(async (resolve2, reject2) => {
                 try {
@@ -745,25 +786,41 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         status: false,
                         type: 'gsi2_not_available'
                     }
+                    const errorRec = {
+                        hkey: hkey,
+                        status: false,
+                        type: 'gsi2_error'
+                    }
+                    const returnError = (msg) => {
+                        errorRec.msg = msg
+                        cacheRec(errorRec)
+                        return resolve2(errorRec)
+                    }
+                    const returnNotAvailable = () => {
+                        cacheRec(notAvailableRec)
+                        return resolve2(notAvailableRec)
+                    }
 
-                    let obj = await getHotelLeastLevelCompletedAndAssessmentsForHkey(hkey)
+                    let obj = await getHotelLeastLevelCompletedForHkey(hkey)
 
-                    // Fill in the footprint, program and certification data
-                    let footprintAudit = await getGreenAuditRecordsForHkeys([hkey])
-                    footprintAudit = footprintAudit[hkey]
+                    let footprintAudit = footprintAudits[hkey]
                     if (footprintAudit) {
-                        rec.program = footprintAudit.program
-                        rec.cert = footprintAudit.cert
-                        if (['green_stay_self_inspection','green_stay_self_inspection_hero'].indexOf(footprintAudit.type) > -1) {
-                            const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
-                            fields.forEach(x => {
-                                if (!('footprint' in rec)) rec.footprint = {}
-                                rec.footprint[x] = footprintAudit[x]
-                            })
-                        }          
-                    }      
+                        const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
+                        fields.forEach(x => {
+                            if (!('footprint' in rec)) rec.footprint = {}
+                            rec.footprint[x] = footprintAudit[x]
+                        })
+                        rec.footprint.anomalies = footprintAudit.anomalies
+                        rec.footprint.status = footprintAudit.status
+                        rec.footprint.type = footprintAudit.type
+                        rec.programs = footprintAudit.programs
+                        rec.certs = footprintAudit.certs
+                        rec.status = footprintAudit.status
+                        rec.type = /green_stay_self_inspection/.test(footprintAudit.type) ? 'gsi2_self_inspection' : footprintAudit.type.replace('green_stay', 'gsi2')
+                    }
 
                     let migrationMode = false
+                    
                     if (obj.level === "NONE") {
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (rec.footprint) {
@@ -771,11 +828,11 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             obj.level = 'ADV_LEVEL'
                             obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
                         } else {
-                            cacheRec(notAvailableRec)
-                            return resolve2(notAvailableRec)
+                            return returnNotAvailable()
                         }
                     }
-
+                    
+                    let queryType = 1
                     let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.customer_id
                         FROM gsi2_level_assessments A
                         LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
@@ -789,69 +846,83 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         LIMIT 1)`
 
                     // When in migration mode from GSI1 then only rate what is there (footprint)
-                    if (migrationMode) query = `SELECT * FROM gsi2_responses_customer_weighted WHERE hkey = ${hkey} AND customer_id = (SELECT MAX(customer_id) AS customer_id FROM gsi2_responses_customer_weighted WHERE customer_id IN (0,${customerId}) LIMIT 1) AND assessment IN (${obj.assessments})`
+                    if (migrationMode) {
+                        query = `SELECT * FROM gsi2_responses_customer_weighted 
+                        WHERE hkey = ${hkey} AND customer_id = (
+                            SELECT MAX(customer_id) AS customer_id FROM gsi2_customer_question_weights WHERE customer_id IN (0,${customerId}) LIMIT 1
+                        ) 
+                        AND assessment IN (${obj.assessments})`
+                        queryType = 2
+                    }
+
+                    let startTime = new Date()
                     
                     db.query(query, async (error, responses, fields) => {
-                        if (responses.length === 0) {
-                            cacheRec(notAvailableRec)
-                            return resolve2(notAvailableRec)
-                        }
                         
-                        const customerIdActual = responses[0].customer_id
-                        let achievePerCategory = {}
-                        let points = 0
-                        let maxPoints = 0
-                        responses.forEach(r => {
-                            if (r.weight > 0) {
-                                if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
-                                achievePerCategory[r.category].total += r.weight
-                                let score = parseFloat(r.response) * r.weight
-                                achievePerCategory[r.category].score += score
-                                points += score
-                                maxPoints += r.weight
-                            }
-                        })
-                        Object.keys(achievePerCategory).map((key, index) => {
-                            achievePerCategory[key] = achievePerCategory[key].score / achievePerCategory[key].total
-                        })
-                        
-                        const customerScoreScale = await getCustomerScoreScale(customerIdActual)
-                        let grade = customerScoreScale.find(x => points >= x.min && points <= x.max).grade
+                        let outInner = {}
+                        if (responses.length > 0) {
+                            const customerIdActual = responses[0].customer_id
+                            let customerScoreScale = await getCustomerScoreScale(customerIdActual)
+                            let achievePerCategory = {}
+                            let points = 0
+                            let maxPoints = 0
+                            responses.forEach(r => {
+                                if (r.weight > 0) {
+                                    if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
+                                    achievePerCategory[r.category].total += r.weight
+                                    let score = parseFloat(r.response) * r.weight
+                                    achievePerCategory[r.category].score += score
+                                    points += score
+                                    maxPoints += r.weight
+                                }
+                            })
+                            Object.keys(achievePerCategory).map((key, index) => {
+                                achievePerCategory[key] = achievePerCategory[key].score / achievePerCategory[key].total
+                            })
+                            
+                            let grade = customerScoreScale.find(x => points >= x.min && points <= x.max)
+                            if (!grade) {
+                                let msg = `Customer with ID ${customerIdActual} has grading not fully configured for ${points} points of hotel ${hkey}.`
+                                console.log(msg)   
+                                return returnError(msg)
+                            } 
+                            grade = grade.grade
 
-                        // Override proportionally to max score for GSI1 migration period
-                        if (migrationMode) {
-                            const maxScorePoints = customerScoreScale.reduce((element,max) => element.max > max ? element.max : max).max
-                            let tweakPoints = points * (maxScorePoints/maxPoints)
-                            grade = customerScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
+                            // Override proportionally to max score for GSI1 migration period
+                            if (migrationMode) {
+                                const maxScorePoints = customerScoreScale.reduce((element,max) => element.max > max ? element.max : max).max
+                                let tweakPoints = points * (maxScorePoints/maxPoints)
+                                grade = customerScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
+                            }
+
+                            rec.type = `gsi2_self_inspection`
+                            rec.status = true
+
+                            outInner = {
+                                customerId: customerIdActual,
+                                displayRules: await getCustomerDisplayConfig(customerIdActual),
+                                assessment_level: obj.level,
+                                scoring: {
+                                    score: grade,
+                                    categories: achievePerCategory,
+                                    points: {
+                                        is: points,
+                                        max: maxPoints,
+                                        percent: points/maxPoints
+                                    }
+                                }
+                            }
                         }
 
                         // Pack response
-                        Object.assign(rec, {
-                            hkey: hkey,
-                            customerId: customerIdActual,
-                            displayRules: await getCustomerDisplayConfig(customerIdActual),
-                            assessment_level: obj.level,
-                            scoring: {
-                                score: grade,
-                                categories: achievePerCategory,
-                                points: {
-                                    is: points,
-                                    max: maxPoints,
-                                    percent: points/maxPoints
-                                }
-                            },
-                            status: true,
-                            type: 'gsi2_self_inspection'
-                        })
-                        cacheGSI2AuditRecord(customerId, rec)
-                        resolve2(rec)             
+                        let out = Object.assign({hkey: hkey}, outInner, rec)
+                        cacheGSI2AuditRecord(customerId, out)
+                        resolve2(out)             
                     })
                 } catch (e) {
-                    console.log(`Error processing GSI2 evaluation for hkey ${hkey} and customer ID ${customerId}`, e)
-                    resolve2({
-                        status: false,
-                        type: "gsi2_server_error"
-                    })
+                    let msg = `Error processing GSI2 evaluation for hkey ${hkey} and customer ID ${customerId}: ${e}`
+                    console.log(msg)
+                    return returnError(msg)
                 }
             }))        
         })
@@ -869,11 +940,12 @@ exports.getGSI2AuditRecordsForHkeysAndCustomerId = getGSI2AuditRecordsForHkeysAn
 
 let getGreenAuditRecordsForHkeys = (hkeys, options) => {
     let shall_backfill = (options && options.backfill)
+    const cacheFilter = SHA256(safeStringify(options))
     return new Promise(async (resolve, reject) => {
         try {
             hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
             if (hkeys.length === 0) return resolve([])
-            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenAuditRecordsForHkeys(hkeys, shall_backfill))
+            let records = (options && options.bypass_cache) ? {} : (await getCachedGreenAuditRecordsForHkeys(hkeys, cacheFilter))
             const hkeysFromCache = Object.keys(records).map(e => Number(e))
             let leftHkeys = hkeys.filter( el => hkeysFromCache.indexOf(Number(el)) < 0 )
             if (leftHkeys.length === 0) return resolve(records)
@@ -884,7 +956,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
             await db.query(`SELECT C.* FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_footprint_claims B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_footprint_claims A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey AND C.report_year = D.report_year`, async (error, greenClaims, fields) => {
                 let evals = []
                 greenClaims.forEach(item => {
-                    evals.push(evalGreenClaimRecord(item))
+                    evals.push(evalGreenClaimRecord(item, !!options.full_certs_and_programs))
                     leftHkeys = leftHkeys.filter(x => x != item.hkey)    
                 })
 
@@ -925,7 +997,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                     })
                     await Promise.all(backfillProms) 
                     Object.values(records).forEach(e => {
-                        cacheGreenAuditRecord(e, shall_backfill)  
+                        cacheGreenAuditRecord(e, cacheFilter)  
                     })
                     resolve(records)
                 }
@@ -933,7 +1005,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                 if (leftHkeys.length > 0) {
                     await db.query(`SELECT C.* FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_audits B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_audits A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_audits C ON C.hkey = D.hkey AND C.report_year = D.report_year`, async (error2, greenAudits, fields2) => {
                         greenAudits.forEach(item => {
-                            evals.push(evalGreenAuditRecord(item))
+                            evals.push(evalGreenAuditRecord(item, !!options.full_certs_and_programs))
                             leftHkeys = leftHkeys.filter(x => x != item.hkey)
                         })
                         complete()
@@ -1431,5 +1503,31 @@ let getHotelsWithGreenException = () => {
         })
     })
 }
-
 exports.getHotelsWithGreenException = getHotelsWithGreenException
+
+let getHotelsWithGreenProgram = () => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain, B.chain_id, B.city, B.country, B.hrs_office FROM green_programs A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+exports.getHotelsWithGreenProgram = getHotelsWithGreenProgram
+
+let getHotelsWithGreenCert = () => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain, B.chain_id, B.city, B.country, B.hrs_office FROM green_certificates A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+exports.getHotelsWithGreenCert = getHotelsWithGreenCert
+
+let getHotelsWithGSI2Report = () => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT DISTINCT A.hkey, B.name, B.chain, B.chain_id, B.city, B.country, B.hrs_office FROM gsi2_reports A LEFT JOIN hotels B ON A.hkey = B.hkey`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+exports.getHotelsWithGSI2Report = getHotelsWithGSI2Report

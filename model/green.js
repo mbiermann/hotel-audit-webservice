@@ -17,8 +17,6 @@ class GreenStayAuditRecord {
         this.wasteClass = auditData.wasteClass
         this.greenClass = auditData.greenClass
         if (auditData.confidence) this.confidence = auditData.confidence
-        if (auditData.program) this.program = select(['name', 'link'], auditData.program)
-        if (auditData.cert) this.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], auditData.cert)
         if (auditData.status === undefined) {
             if (auditData.anomalies && auditData.anomalies.length > 0) {
                 this.anomalies = auditData.anomalies
@@ -36,6 +34,12 @@ class GreenStayAuditRecord {
             this.type = auditData.type
             this.status = auditData.status
         }
+        // GSI1
+        if (auditData.program) this.program = select(['name', 'link'], auditData.program)
+        if (auditData.cert) this.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], auditData.cert)
+        // GSI2
+        if (auditData.programs) this.programs = auditData.programs.map(x => select(['name', 'link'], x))
+        if (auditData.certs) this.certs = auditData.certs.map(x => select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], x))
     }
 }
 

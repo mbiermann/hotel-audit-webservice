@@ -291,8 +291,8 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
     storage.getAllHotelsWithGreenRecord().then(hotels => {
-        const hkeys = hotels.map(x => x.hkey)
-        storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true}).then(res => {
+        let hkeys = hotels.map(x => x.hkey)
+        storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
             let headers = []
             let data = {}
             hotels.forEach(x => {
@@ -399,7 +399,7 @@ router.get('/green/reports/group/:code', async (req, resp) => {
     let fun = codeData.type === "AGENT" ? storage.getHotelsByAgentId : storage.getHotelsByChainId
     fun(codeData.id).then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
-        storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true}).then(res => {
+        storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
             let headers = []
             let data = {}
             hotels.forEach(x => {
