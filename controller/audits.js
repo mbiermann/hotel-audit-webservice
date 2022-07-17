@@ -399,7 +399,8 @@ router.get('/green/reports/group/:code', async (req, resp) => {
     let fun = codeData.type === "AGENT" ? storage.getHotelsByAgentId : storage.getHotelsByChainId
     fun(codeData.id).then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
-        storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
+        //storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
+        storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
             let headers = []
             let data = {}
             hotels.forEach(x => {

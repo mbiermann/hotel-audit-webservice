@@ -874,7 +874,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                                 if (r.weight > 0) {
                                     let map = {GSI_FPR_WATER_GRADE: 'waterClass', GSI_FPR_WASTE_GRADE: 'wasteClass', GSI_FPR_CARBON_GRADE: 'carbonClass', GSI_FPR_GREENSTAY_GRADE: 'greenClass'}
                                     let mapClass = (cls) => {return ((['D','C','B','A'].indexOf(cls) + 1)/4)}
-                                    r.response = map.hasOwnProperty(r.question_id) ? mapClass(rec.footprint[map[r.question_id]]) : 0
+                                    r.response = map.hasOwnProperty(r.question_id) ? mapClass(rec.footprint[map[r.question_id]]) : r.response
                                     if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
                                     achievePerCategory[r.category].total += r.weight
                                     let score = parseFloat(r.response) * r.weight
@@ -888,12 +888,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             })
                             
                             let grade = customerScoreScale.find(x => points >= x.min && points <= x.max)
-                            if (!grade) {
-                                let msg = `Customer with ID ${customerIdActual} has grading not fully configured for ${points} points of hotel ${hkey}.`
-                                console.log(msg)   
-                                return returnError(msg)
-                            } 
-                            grade = grade.grade
+                            grade = !!grade ? grade.grade : null
 
                             // Override proportionally to max score for GSI1 migration period
                             if (migrationMode) {
@@ -916,6 +911,15 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                                     }
                                 }
                             }
+                            
+                            if (!grade) {
+                                let msg = `Customer with ID ${customerIdActual} has grading not fully configured for ${points} points of hotel ${hkey}.`
+                                console.log(msg)
+                                rec.msg = msg
+                                rec.type = 'gsi2_error'
+                                rec.status = false
+                                return complete()
+                            } 
 
                             rec.type = `gsi2_self_inspection${isBackfillQuery && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
                             rec.status = true
