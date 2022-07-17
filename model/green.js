@@ -22,9 +22,6 @@ class GreenStayAuditRecord {
                 this.anomalies = auditData.anomalies
                 this.type = "green_stay_blocked_anomaly"
                 this.status = false
-            } else if (auditData.chain_id == 15 && this.greenClass != "A") {
-                this.type = "green_stay_blocked_filter"
-                this.status = false
             } else {
                 this.type = "green_stay_self_inspection"
                 if (["A","B"].indexOf(auditData.greenClass) > -1) this.type = `${this.type}_hero`
@@ -33,6 +30,10 @@ class GreenStayAuditRecord {
         } else {
             this.type = auditData.type
             this.status = auditData.status
+        }
+        if (auditData.chain_id == 15 && this.greenClass != "A") {
+            this.type = "green_stay_blocked_filter"
+            this.status = false
         }
         // GSI1
         if (auditData.program) this.program = select(['name', 'link'], auditData.program)

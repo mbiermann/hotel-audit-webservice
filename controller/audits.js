@@ -190,8 +190,8 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('true' == req.query.bypass_cache))
-    let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys, {backfill: ("true" == req.query.backfill)})
-    let gsi2 = (exclude.includes('gsi2')) ? null : storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, customerId, {bypass_cache: ("true" == req.query.bypass_cache)})
+    let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys, {backfill: ("true" == req.query.backfill), bypass_cache: ('true' == req.query.bypass_cache)})
+    let gsi2 = (exclude.includes('gsi2')) ? null : storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, customerId, {bypass_cache: ("true" == req.query.bypass_cache), backfill: ("true" == req.query.backfill)})
     let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
     let checkin = (exclude.includes('checkin')) ? null : storage.getCheckinConfigsForHkeys(hkeys, checkinDate)
 
@@ -291,7 +291,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
     storage.getAllHotelsWithGreenRecord().then(hotels => {
-        let hkeys = hotels.map(x => x.hkey)
+        let hkeys = hotels.map(x => x.hkey)        
         storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
             let headers = []
             let data = {}

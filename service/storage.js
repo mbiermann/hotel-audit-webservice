@@ -128,14 +128,15 @@ exports.getInvitations = (offset, size) => {
 let getGreenhouseGasFactors = (i) => {
 
     return new Promise((resolve, reject) => {
-        const cache_key = "ghg_factors"
+        let report_year = ([2019,2021].indexOf(i.report_year) > -1 ? i.report_year : 2021)
+        const cache_key = `ghg_factors_${report_year}`
         cache.get(cache_key, (err, val) => { 
             if (!!val) {
                 resolve(JSON.parse(val))
             } else {
                 let refrigeratorFactors = db.select("refrigerator_emission_factors")
                 let fuelFactors = db.select("mobilefuels_emission_factors")
-                let electricityFactors = db.select(`electricity_emission_factors_${i.report_year}`)
+                let electricityFactors = db.select(`electricity_emission_factors_${report_year}`)
 
                 Promise.all([refrigeratorFactors, fuelFactors, electricityFactors]).then(res => {
 
@@ -245,7 +246,6 @@ const _addAnomaly = (item, anomalyType, metric, value) => {
 
 let evalGreenAuditRecord = (i, full_certs_and_programs = false) => {
     return new Promise((resolve, reject) => {
-
         getGreenhouseGasFactors(i).then(async factors => {
 
             let total_electricity_kwh = i.total_electricity_kwh || 0
@@ -523,8 +523,8 @@ const cacheGreenAuditRecord = (elem, filter) => {
     cache.set(`green:${elem.hkey}:${filter}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
-const cacheGSI2AuditRecord = (customerId, rec) => {
-    cache.set(`gsi2:${customerId}:${rec.hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL);
+const cacheGSI2AuditRecord = (customerId, rec, filter) => {
+    cache.set(`gsi2:${customerId}:${rec.hkey}:${filter}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL);
 }
 
 const cacheGreenExceptionRecordForHkey = (hkey, elem) => {
@@ -535,9 +535,9 @@ const cacheGreenTrackingForHkey = (hkey, elem) => {
     cache.set(`green_tracking:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
-const getCachedGSI2AuditRecordForHkeyAndCustomerId = (hkey, customerId) => {
+const getCachedGSI2AuditRecordForHkeyAndCustomerId = (hkey, customerId, filter) => {
     return new Promise((resolve, reject) => {
-        cache.get(`gsi2:${customerId}:${hkey}`, (err, val) => {
+        cache.get(`gsi2:${customerId}:${hkey}:${filter}`, (err, val) => {
             let obj = null
             if (val) obj = JSON.parse(val)
             resolve({hkey: hkey, obj: obj})
@@ -729,13 +729,15 @@ exports.getHkeysForCustomer = (ref) => {
 }
 
 let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options) => {
+    const cacheFilter = SHA256(safeStringify(options))
+    let shall_backfill = (options && options.backfill)
     return new Promise(async (resolve, reject) => {
         let customerId = (targetCustomerId) ? targetCustomerId : 0
         let cacheProms = []
         if (!options  || !('bypass_cache' in options) || options.bypass_cache === false) {
             for (let hkey of hkeys) {
                 cacheProms.push(new Promise((resolve3) => {
-                    getCachedGSI2AuditRecordForHkeyAndCustomerId(hkey, customerId).then(resolve3)
+                    getCachedGSI2AuditRecordForHkeyAndCustomerId(hkey, customerId, cacheFilter).then(resolve3)
                 }))
             }
         }
@@ -772,35 +774,33 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
         let proms = []
         
         // Fill in the footprint, program and certification data
-        let footprintAudits = await getGreenAuditRecordsForHkeys(leftHKeys, {full_certs_and_programs: true})
+        let footprintAudits = await getGreenAuditRecordsForHkeys(leftHKeys, {full_certs_and_programs: true, backfill: shall_backfill, bypass_cache: shall_backfill})
 
         leftHKeys.forEach(async hkey => {
             proms.push(new Promise(async (resolve2, reject2) => {
-                try {
-                    const cacheRec = (rec) => {
-                        cache.set(`gsi2:${customerId}:${hkey}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL)
-                    }
-                    let rec = {}
-                    const notAvailableRec = {
-                        hkey: hkey,
-                        status: false,
-                        type: 'gsi2_not_available'
-                    }
-                    const errorRec = {
-                        hkey: hkey,
-                        status: false,
-                        type: 'gsi2_error'
-                    }
-                    const returnError = (msg) => {
-                        errorRec.msg = msg
-                        cacheRec(errorRec)
-                        return resolve2(errorRec)
-                    }
-                    const returnNotAvailable = () => {
-                        cacheRec(notAvailableRec)
-                        return resolve2(notAvailableRec)
-                    }
+                
+                const notAvailableRec = {
+                    hkey: hkey,
+                    status: false,
+                    type: 'gsi2_not_available'
+                }
+                const errorRec = {
+                    hkey: hkey,
+                    status: false,
+                    type: 'gsi2_error'
+                }
+                const returnError = (msg) => {
+                    errorRec.msg = msg
+                    cacheGSI2AuditRecord(customerId, errorRec, cacheFilter)
+                    return resolve2(errorRec)
+                }
+                const returnNotAvailable = () => {
+                    cacheGSI2AuditRecord(customerId, notAvailableRec, cacheFilter)
+                    return resolve2(notAvailableRec)
+                }
 
+                try {
+                    let rec = {}
                     let obj = await getHotelLeastLevelCompletedForHkey(hkey)
 
                     let footprintAudit = footprintAudits[hkey]
@@ -810,9 +810,10 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             if (!('footprint' in rec)) rec.footprint = {}
                             rec.footprint[x] = footprintAudit[x]
                         })
-                        rec.footprint.anomalies = footprintAudit.anomalies
+                        if (!!footprintAudit.anomalies) rec.footprint.anomalies = footprintAudit.anomalies
                         rec.footprint.status = footprintAudit.status
                         rec.footprint.type = footprintAudit.type
+                        if (!!footprintAudit.original_type) rec.footprint.original_type = footprintAudit.original_type
                         rec.programs = footprintAudit.programs
                         rec.certs = footprintAudit.certs
                         rec.status = footprintAudit.status
@@ -823,14 +824,32 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                     let complete = () => {
                         // Pack response
                         let out = Object.assign({hkey: hkey}, outInner, rec)
-                        cacheGSI2AuditRecord(customerId, out)
+                        cacheGSI2AuditRecord(customerId, out, cacheFilter)
                         resolve2(out)    
                     }
 
+                    let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.customer_id
+                        FROM gsi2_level_assessments A
+                        LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
+                        LEFT JOIN gsi2_customer_question_weights C ON B.question_id = C.question_id
+                        LEFT JOIN gsi2_questions D ON C.question_id = D._id
+                        LEFT JOIN (SELECT * FROM gsi2_responses_full_view WHERE hkey = ${hkey}) E ON C.question_id = E.question_id
+                        WHERE A.\`level\` = '${obj.level}' AND C.weight IS NOT NULL AND C.customer_id = (
+                        SELECT MAX(customer_id) AS customer_id
+                        FROM gsi2_customer_question_weights
+                        WHERE customer_id IN (0,${customerId})
+                        LIMIT 1)`
+
+                    let isBackfillQuery = false
+                    
                     if (obj.level === "NONE") {
                         // During migration grace period from GSI1 overwrite to Advanced level
-                        if (rec.footprint) {
+                        if (!!rec.footprint) {
                             if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
+                                isBackfillQuery = (shall_backfill && /backfill/.test(rec.footprint.type))
+                                query = `SELECT A.customer_id, A.question_id, C.category, A.weight FROM gsi2_customer_question_weights A LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id LEFT JOIN gsi2_questions C ON B.question_id = C._id WHERE A.customer_id = (
+                                    SELECT MAX(customer_id) AS customer_id FROM gsi2_customer_question_weights WHERE customer_id IN (0,${customerId}) LIMIT 1
+                                )  AND B.assessment_id = 'HOTEL_FPR'`
                                 migrationMode = true
                                 obj.level = 'ADV_LEVEL'
                                 obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
@@ -844,29 +863,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         }
                     }
                     
-                    let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.customer_id
-                        FROM gsi2_level_assessments A
-                        LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
-                        LEFT JOIN gsi2_customer_question_weights C ON B.question_id = C.question_id
-                        LEFT JOIN gsi2_questions D ON C.question_id = D._id
-                        LEFT JOIN (SELECT * FROM gsi2_responses_full_view WHERE hkey = ${hkey}) E ON C.question_id = E.question_id
-                        WHERE A.\`level\` = '${obj.level}' AND C.weight IS NOT NULL AND C.customer_id = (
-                        SELECT MAX(customer_id) AS customer_id
-                        FROM gsi2_customer_question_weights
-                        WHERE customer_id IN (0,${customerId})
-                        LIMIT 1)`
-
-                    // When in migration mode from GSI1 then only rate what is there (footprint)
-                    if (migrationMode) {
-                        query = `SELECT * FROM gsi2_responses_customer_weighted 
-                        WHERE hkey = ${hkey} AND customer_id = (
-                            SELECT MAX(customer_id) AS customer_id FROM gsi2_customer_question_weights WHERE customer_id IN (0,${customerId}) LIMIT 1
-                        ) 
-                        AND assessment IN (${obj.assessments})`
-                    }
-                    
                     db.query(query, async (error, responses, fields) => {
-                        
                         if (responses.length > 0) {
                             const customerIdActual = responses[0].customer_id
                             let customerScoreScale = await getCustomerScoreScale(customerIdActual)
@@ -875,6 +872,9 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             let maxPoints = 0
                             responses.forEach(r => {
                                 if (r.weight > 0) {
+                                    let map = {GSI_FPR_WATER_GRADE: 'waterClass', GSI_FPR_WASTE_GRADE: 'wasteClass', GSI_FPR_CARBON_GRADE: 'carbonClass', GSI_FPR_GREENSTAY_GRADE: 'greenClass'}
+                                    let mapClass = (cls) => {return ((['D','C','B','A'].indexOf(cls) + 1)/4)}
+                                    r.response = map.hasOwnProperty(r.question_id) ? mapClass(rec.footprint[map[r.question_id]]) : 0
                                     if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
                                     achievePerCategory[r.category].total += r.weight
                                     let score = parseFloat(r.response) * r.weight
@@ -917,8 +917,10 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                                 }
                             }
 
-                            rec.type = `gsi2_self_inspection`
+                            rec.type = `gsi2_self_inspection${isBackfillQuery && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
                             rec.status = true
+                        } else {
+                            return returnNotAvailable()
                         }
 
                         complete()         
@@ -957,7 +959,8 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
             let filter = `WHERE hkey IN (${leftHkeys})`
             
             //let greenClaims = await db.select("green_footprint_claims", filter)
-            await db.query(`SELECT C.* FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_footprint_claims B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_footprint_claims A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey AND C.report_year = D.report_year`, async (error, greenClaims, fields) => {
+            let query = `SELECT C.*, E.chain_id FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_footprint_claims B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_footprint_claims A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey AND C.report_year = D.report_year LEFT JOIN hotels E ON D.hkey = E.hkey`
+            await db.query(query, async (error, greenClaims, fields) => {
                 let evals = []
                 greenClaims.forEach(item => {
                     evals.push(evalGreenClaimRecord(item, !!options.full_certs_and_programs))
@@ -986,7 +989,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                     res.forEach(e => {
                         if (shall_backfill && !/green_stay_self_inspection/.test(e.type)) {
                             backfillProms.push(new Promise((resolve5, reject5) => {
-                                db.query(`SELECT * FROM green_hotels_backfill WHERE \`mode\` > 0 AND hkey = ${e.hkey}`, async (error, backfill, fields) => {
+                                db.query(`SELECT * FROM green_hotels_backfill WHERE hkey = ${e.hkey}`, async (error, backfill, fields) => {
                                     if (backfill.length > 0) {
                                         let obj = await evalGreenBackfillRecord(backfill[0])
                                         obj.original_type = e.type
