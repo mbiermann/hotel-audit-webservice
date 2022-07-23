@@ -292,7 +292,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
     storage.getAllHotelsWithGreenRecord().then(hotels => {
         let hkeys = hotels.map(x => x.hkey)        
-        storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
+        storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {full_certs_and_programs: true}).then(res => {
             let headers = []
             let data = {}
             hotels.forEach(x => {

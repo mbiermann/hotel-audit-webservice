@@ -16,7 +16,6 @@ const swaggerUi = require('swagger-ui-express')
 const YAML = require('yamljs')
 const swaggerDocument = YAML.load('./swagger.yaml')
 const {middleware: jwtAuthMiddleware} = require('./utils/jwt-auth')
-const monitoring = require('./utils/monitoring')
 
 process.env.service_name = package.name
 
@@ -25,7 +24,6 @@ app.use(compression())
 app.use(bodyParser.json())
 app.use(bodyParser.urlencoded({ extended: true }))
 app.use(cors())
-app.use(monitoring)
 
 app.use(jwtAuthMiddleware)
 app.use('/auth', auth)
