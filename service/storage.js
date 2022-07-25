@@ -523,8 +523,8 @@ const cacheGreenAuditRecord = (elem, filter) => {
     cache.set(`green:${elem.hkey}:${filter}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
-const cacheGSI2AuditRecord = (customerId, rec, filter) => {
-    cache.set(`gsi2:${customerId}:${rec.hkey}:${filter}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL);
+const cacheGSI2AuditRecord = (configId, rec, filter) => {
+    cache.set(`gsi2:${configId}:${rec.hkey}:${filter}`, JSON.stringify(rec), 'EX', process.env.REDIS_TTL);
 }
 
 const cacheGreenExceptionRecordForHkey = (hkey, elem) => {
@@ -535,9 +535,9 @@ const cacheGreenTrackingForHkey = (hkey, elem) => {
     cache.set(`green_tracking:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
-const getCachedGSI2AuditRecordForHkeyAndCustomerId = (hkey, customerId, filter) => {
+const getCachedGSI2AuditRecordForHkeyAndConfigId = (hkey, configId, filter) => {
     return new Promise((resolve, reject) => {
-        cache.get(`gsi2:${customerId}:${hkey}:${filter}`, (err, val) => {
+        cache.get(`gsi2:${configId}:${hkey}:${filter}`, (err, val) => {
             let obj = null
             if (val) obj = JSON.parse(val)
             resolve({hkey: hkey, obj: obj})
@@ -728,16 +728,20 @@ exports.getHkeysForCustomer = (ref) => {
     })
 }
 
-let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options) => {
+let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
     const cacheFilter = SHA256(safeStringify(options))
     let shall_backfill = (options && options.backfill)
     return new Promise(async (resolve, reject) => {
-        let customerId = (targetCustomerId) ? targetCustomerId : 0
+        let configId = '0'
+        if (!!configKey) {
+            let configQueryResult = await db.select("gsi2_customer_configs", `WHERE \`key\` = '${configKey}'`)
+            configId = configQueryResult.length > 0 ? configQueryResult[0].id : '0'
+        }
         let cacheProms = []
         if (!options  || !('bypass_cache' in options) || options.bypass_cache === false) {
             for (let hkey of hkeys) {
                 cacheProms.push(new Promise((resolve3) => {
-                    getCachedGSI2AuditRecordForHkeyAndCustomerId(hkey, customerId, cacheFilter).then(resolve3)
+                    getCachedGSI2AuditRecordForHkeyAndConfigId(hkey, configId, cacheFilter).then(resolve3)
                 }))
             }
         }
@@ -759,11 +763,11 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                     })
             })
         }
-        let _customerScoreScale = null
-        let getCustomerScoreScale = async (_customerId) => {
-            if (!!_customerScoreScale) return _customerScoreScale
-            _customerScoreScale = await db.select("gsi2_customer_grading", `WHERE customer_id = ${_customerId}`)
-            return _customerScoreScale
+        let _configScoreScale = null
+        let getConfigScoreScale = async (configId) => {
+            if (!!_configScoreScale) return _configScoreScale
+            _configScoreScale = await db.select("gsi2_config_grading", `WHERE config_id = ${configId}`)
+            return _configScoreScale
         }
         let proms = []
 
@@ -784,11 +788,11 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                 }
                 const returnError = (msg) => {
                     errorRec.msg = msg
-                    cacheGSI2AuditRecord(customerId, errorRec, cacheFilter)
+                    cacheGSI2AuditRecord(configId, errorRec, cacheFilter)
                     return resolve2(errorRec)
                 }
                 const returnNotAvailable = () => {
-                    cacheGSI2AuditRecord(customerId, notAvailableRec, cacheFilter)
+                    cacheGSI2AuditRecord(configId, notAvailableRec, cacheFilter)
                     return resolve2(notAvailableRec)
                 }
 
@@ -817,20 +821,20 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                     let complete = () => {
                         // Pack response
                         let out = Object.assign({hkey: hkey}, outInner, rec)
-                        cacheGSI2AuditRecord(customerId, out, cacheFilter)
+                        cacheGSI2AuditRecord(configId, out, cacheFilter)
                         resolve2(out)    
                     }
 
-                    let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.customer_id
+                    let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.config_id
                         FROM gsi2_level_assessments A
                         LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
-                        LEFT JOIN gsi2_customer_question_weights C ON B.question_id = C.question_id
+                        LEFT JOIN gsi2_config_question_weights C ON B.question_id = C.question_id
                         LEFT JOIN gsi2_questions D ON C.question_id = D._id
                         LEFT JOIN (SELECT * FROM gsi2_responses_full_view WHERE hkey = ${hkey}) E ON C.question_id = E.question_id
-                        WHERE A.\`level\` = '${obj.level}' AND C.weight IS NOT NULL AND C.customer_id = (
-                        SELECT MAX(customer_id) AS customer_id
-                        FROM gsi2_customer_question_weights
-                        WHERE customer_id IN (0,${customerId})
+                        WHERE A.\`level\` = '${obj.level}' AND C.weight IS NOT NULL AND C.config_id = (
+                        SELECT MAX(config_id) AS config_id
+                        FROM gsi2_config_question_weights
+                        WHERE config_id IN (0,${configId})
                         LIMIT 1)`
 
                     let isBackfillQuery = false
@@ -840,8 +844,8 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         if (!!rec.footprint) {
                             if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
                                 isBackfillQuery = (shall_backfill && /backfill/.test(rec.footprint.type))
-                                query = `SELECT A.customer_id, A.question_id, C.category, A.weight FROM gsi2_customer_question_weights A LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id LEFT JOIN gsi2_questions C ON B.question_id = C._id WHERE A.customer_id = (
-                                    SELECT MAX(customer_id) AS customer_id FROM gsi2_customer_question_weights WHERE customer_id IN (0,${customerId}) LIMIT 1
+                                query = `SELECT A.config_id, A.question_id, C.category, A.weight FROM gsi2_config_question_weights A LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id LEFT JOIN gsi2_questions C ON B.question_id = C._id WHERE A.config_id = (
+                                    SELECT MAX(config_id) AS config_id FROM gsi2_config_question_weights WHERE config_id IN (0,${configId}) LIMIT 1
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
                                 migrationMode = true
                                 obj.level = 'ADV_LEVEL'
@@ -859,8 +863,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                     db.query(query, async (error, responses, fields) => {
                         
                         if (responses.length > 0) {
-                            const customerIdActual = responses[0].customer_id
-                            let customerScoreScale = await getCustomerScoreScale(customerIdActual)
+                            let configScoreScale = await getConfigScoreScale(configId)
                             let achievePerCategory = {}
                             let points = 0
                             let maxPoints = 0
@@ -881,18 +884,18 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                                 achievePerCategory[key] = achievePerCategory[key].score / achievePerCategory[key].total
                             })
                             
-                            let grade = customerScoreScale.find(x => points >= x.min && points <= x.max)
+                            let grade = configScoreScale.find(x => points >= x.min && points <= x.max)
                             grade = !!grade ? grade.grade : null
 
                             // Override proportionally to max score for GSI1 migration period
                             if (migrationMode) {
-                                const maxScorePoints = customerScoreScale.reduce((element,max) => element.max > max ? element.max : max).max
+                                const maxScorePoints = configScoreScale.reduce((element,max) => element.max > max ? element.max : max).max
                                 let tweakPoints = points * (maxScorePoints/maxPoints)
-                                grade = customerScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
+                                grade = configScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
                             }
 
                             outInner = {
-                                customerId: customerIdActual,
+                                config_id: configId,
                                 assessment_level: obj.level,
                                 scoring: {
                                     score: grade,
@@ -906,7 +909,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             }
                             
                             if (!grade) {
-                                let msg = `Customer with ID ${customerIdActual} has grading not fully configured for ${points} points of hotel ${hkey}.`
+                                let msg = `Config with ID ${configId} has grading not fully configured for ${points} points of hotel ${hkey}.`
                                 console.log(msg)
                                 rec.msg = msg
                                 rec.type = 'gsi2_error'
@@ -915,7 +918,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                             } 
 
                             rec.type = `gsi2_self_inspection${isBackfillQuery && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
-                            if (grade >= customerScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
+                            if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
                             return returnNotAvailable()
@@ -924,7 +927,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
                         complete()         
                     })
                 } catch (e) {
-                    let msg = `Error processing GSI2 evaluation for hkey ${hkey} and customer ID ${customerId}: ${e}`
+                    let msg = `Error processing GSI2 evaluation for hkey ${hkey} and config ID ${configId}: ${e}`
                     console.log(msg)
                     return returnError(msg)
                 }
@@ -940,7 +943,7 @@ let getGSI2AuditRecordsForHkeysAndCustomerId = (hkeys, targetCustomerId, options
         }).catch(reject)
     })
 }
-exports.getGSI2AuditRecordsForHkeysAndCustomerId = getGSI2AuditRecordsForHkeysAndCustomerId
+exports.getGSI2AuditRecordsForHkeysAndConfigKey = getGSI2AuditRecordsForHkeysAndConfigKey
 
 let getGreenAuditRecordsForHkeys = (hkeys, options) => {
     let shall_backfill = (options && options.backfill)
@@ -1136,7 +1139,7 @@ const getCachedGeosureRecordsForHkeys = (hkeys) => {
     })   
 }
 
-exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cache = false, backfill = false, bypass_redirect_mapping = false, exclude = [], customerId = 0) => {
+exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cache = false, backfill = false, bypass_redirect_mapping = false, exclude = [], configKey = 0) => {
     let filter = ''
     filter = `WHERE hkey IN (${hkeys})`
 
@@ -1224,7 +1227,7 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
     } 
 
     if (programs['gsi2']) { 
-        let gsi2AuditRecordsFetch = this.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, customerId, {bypass_cache: bypass_cache}).then((res) => {
+        let gsi2AuditRecordsFetch = this.getGSI2AuditRecordsForHkeysAndConfigKey(hkeys, configKey, {bypass_cache: bypass_cache}).then((res) => {
             for (let hkey of Object.keys(res)) {
                 let elem = res[hkey]
                 if (!audits[hkey]) audits[hkey] = []

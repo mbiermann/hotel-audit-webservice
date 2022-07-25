@@ -178,7 +178,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     if (include.length > 0) {
         exclude = ['touchless','cleansafe','green','gsi2','geosure','checkin'].filter(x => include.indexOf(x) === -1)
     }
-    let customerId = req.query.customer_id    
+    let configKey = req.query.config_key    
 
     if (!!req.query && !!req.query.checkin_date) {
         if (!(/[0-9]{4}\-[0-9]{2}\-[0-9]{2}/.test(req.query.checkin_date))) {
@@ -191,7 +191,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
     let touchless = (exclude.includes('touchless')) ? null : storage.getTouchlessStatusForHkeys(hkeys)
     let cleansafe = (exclude.includes('cleansafe')) ? null : storage.getAuditRecordsForHkeys(hkeys, ('true' == req.query.bypass_cache))
     let green = (exclude.includes('green')) ? null : storage.getGreenAuditRecordsForHkeys(hkeys, {backfill: ("true" == req.query.backfill), bypass_cache: ('true' == req.query.bypass_cache)})
-    let gsi2 = (exclude.includes('gsi2')) ? null : storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, customerId, {bypass_cache: ("true" == req.query.bypass_cache), backfill: ("true" == req.query.backfill)})
+    let gsi2 = (exclude.includes('gsi2')) ? null : storage.getGSI2AuditRecordsForHkeysAndConfigKey(hkeys, configKey, {bypass_cache: ("true" == req.query.bypass_cache), backfill: ("true" == req.query.backfill)})
     let geosure = (exclude.includes('geosure')) ? null : storage.getGeosureRecordsForHkeys(hkeys)
     let checkin = (exclude.includes('checkin')) ? null : storage.getCheckinConfigsForHkeys(hkeys, checkinDate)
 
