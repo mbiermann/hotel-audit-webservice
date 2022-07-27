@@ -977,7 +977,16 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                     
                     let filter = `WHERE hkey IN (${leftHkeys})`
                     
-                    let query = `SELECT C.*, E.chain_id FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_footprint_claims B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_footprint_claims A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey AND C.report_year = D.report_year LEFT JOIN hotels E ON D.hkey = E.hkey`
+                    let query = `SELECT C.*, E.chain_id FROM (
+                        SELECT DISTINCT(A.hkey), (
+                            SELECT MAX(B.report_year) FROM green_footprint_claims B WHERE B.hkey = A.hkey LIMIT 1
+                        ) AS report_year 
+                        FROM green_footprint_claims A 
+                        WHERE A.hkey IN (${leftHkeys})
+                    ) D 
+                    LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey
+                    LEFT JOIN hotels E ON D.hkey = E.hkey
+                    WHERE C.report_year = D.report_year`
                     await db.query(query, async (error, greenClaims, fields) => {
                         let evals = []
                         greenClaims.forEach(item => {
@@ -1028,7 +1037,15 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                         }
 
                         if (leftHkeys.length > 0) {
-                            await db.query(`SELECT C.* FROM (SELECT DISTINCT(A.hkey), (SELECT MAX(B.report_year) FROM green_audits B WHERE B.hkey = A.hkey LIMIT 1) AS report_year FROM green_audits A WHERE A.hkey IN (${leftHkeys})) D LEFT JOIN green_audits C ON C.hkey = D.hkey AND C.report_year = D.report_year`, async (error2, greenAudits, fields2) => {
+                            await db.query(`SELECT C.* FROM (
+                                SELECT DISTINCT(A.hkey), (
+                                    SELECT MAX(B.report_year) FROM green_audits B WHERE B.hkey = A.hkey LIMIT 1
+                                ) AS report_year 
+                                FROM green_audits A 
+                                WHERE A.hkey IN (${leftHkeys})
+                            ) D 
+                            LEFT JOIN green_audits C ON C.hkey = D.hkey 
+                            WHERE C.report_year = D.report_year`, async (error2, greenAudits, fields2) => {
                                 greenAudits.forEach(item => {
                                     evals.push(evalGreenAuditRecord(item, !!options.full_certs_and_programs))
                                     leftHkeys = leftHkeys.filter(x => x != item.hkey)
@@ -1375,7 +1392,7 @@ exports.readFileStream = (filename) => {
 
 exports.getHotelsByChainId = (id) => {
     return new Promise((resolve, reject) => {
-        db.query(`SELECT hkey, name, brand, city, country FROM hotels_view WHERE chain_id = ${id} ORDER BY hkey ASC`, [], (res) => {
+        db.query(`SELECT hkey, name, brand, city, country FROM hotels WHERE chain_id = ${id} ORDER BY hkey ASC`, [], (res) => {
             resolve(res)
         })
     })
@@ -1385,7 +1402,7 @@ exports.getHotelsByAgentId = (id) => {
     return new Promise((resolve, reject) => {
         db.query(`SELECT hkey FROM agents_hotels WHERE agent_id = '${id}'`, [], (res) => {
             if (res.length === 0) return resolve([])
-            db.query(`SELECT hkey, name, brand, city, country FROM hotels_view WHERE hkey IN (${res.map(x => x.hkey).join(',')}) ORDER BY hkey ASC`, [], (res) => {
+            db.query(`SELECT hkey, name, brand, city, country FROM hotels WHERE hkey IN (${res.map(x => x.hkey).join(',')}) ORDER BY hkey ASC`, [], (res) => {
                 resolve(res)
             })
         })
