@@ -776,6 +776,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
         leftHKeys.forEach(async hkey => {
             proms.push(new Promise(async (resolve2, reject2) => {
+                //let startTime = new Date();
                 const notAvailableRec = {
                     hkey: hkey,
                     status: false,
@@ -789,10 +790,12 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                 const returnError = (msg) => {
                     errorRec.msg = msg
                     cacheGSI2AuditRecord(configId, errorRec, cacheFilter)
+                    //console.log("Time passed", new Date().getTime() - startTime.getTime())
                     return resolve2(errorRec)
                 }
                 const returnNotAvailable = () => {
                     cacheGSI2AuditRecord(configId, notAvailableRec, cacheFilter)
+                    //console.log("Time passed", new Date().getTime() - startTime.getTime())
                     return resolve2(notAvailableRec)
                 }
 
@@ -822,6 +825,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         // Pack response
                         let out = Object.assign({hkey: hkey}, outInner, rec)
                         cacheGSI2AuditRecord(configId, out, cacheFilter)
+                        //console.log("Time passed", new Date().getTime() - startTime.getTime())
                         resolve2(out)    
                     }
 
@@ -844,7 +848,10 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         if (!!rec.footprint) {
                             if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
                                 isBackfillQuery = (shall_backfill && /backfill/.test(rec.footprint.type))
-                                query = `SELECT A.config_id, A.question_id, C.category, A.weight FROM gsi2_config_question_weights A LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id LEFT JOIN gsi2_questions C ON B.question_id = C._id WHERE A.config_id = (
+                                query = `SELECT A.config_id, A.question_id, C.category, A.weight 
+                                FROM gsi2_config_question_weights A 
+                                LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id 
+                                LEFT JOIN gsi2_questions C ON B.question_id = C._id WHERE A.config_id = (
                                     SELECT MAX(config_id) AS config_id FROM gsi2_config_question_weights WHERE config_id IN (0,${configId}) LIMIT 1
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
                                 migrationMode = true

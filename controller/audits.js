@@ -290,38 +290,8 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 })
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
-    storage.getAllHotelsWithGreenRecord().then(hotels => {
-        let hkeys = hotels.map(x => x.hkey)        
-        storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {full_certs_and_programs: true}).then(res => {
-            let headers = []
-            let data = {}
-            hotels.forEach(x => {
-                data[x.hkey] = flatten({...x, ...res[x.hkey]}, {delimiter: "_"})
-                Object.keys(data[x.hkey]).forEach(h => {
-                    if (headers.indexOf(h) === -1) headers.push(h)
-                })
-            })
-            let out = []
-            out.push(headers)            
-            hkeys.forEach(x => {
-                let rec = []
-                if (x in data) {
-                    headers.forEach(h => rec.push(data[x][h]))
-                } else {
-                    headers.forEach(h => rec.push((h === 'hkey') ? x : null))
-                }
-                out.push(rec)
-            })   
-            var buffer = xlsx.build([{name: "report", data: out}])
-            resp.set('Content-Type', 'application/octet-stream')
-            resp.attachment(`Green Stay - Hotel Group Status Report - All.xlsx`)
-            resp.status(200).send(buffer)
-        }).catch(err => {
-            trackEvent('Audit Web Service', 'Green Audit Group Report Failure', "All")
-            logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 500, "error": "Server Error" })
-            resp.status(500).json({ error: 'Server Error' })
-        })
-    })
+    resp.setHeader('Content-Disposition', 'attachment;filename=gsi2-report.zip')
+    storage.readFileStream('gsi2_out.csv.zip').pipe(resp)
 })
 
 router.get('/green/reports/SoC', combinedAuthMiddleware, async (req, resp) => {
@@ -396,11 +366,12 @@ router.get('/green/reports/group/:code', async (req, resp) => {
     }
     if (dec.length === 0) return resp.sendStatus(403)
     let codeData = JSON.parse(dec)
+    
     let fun = codeData.type === "AGENT" ? storage.getHotelsByAgentId : storage.getHotelsByChainId
     fun(codeData.id).then(hotels => {
         const hkeys = hotels.map(x => x.hkey)
         //storage.getGreenAuditRecordsForHkeys(hkeys, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
-        storage.getGSI2AuditRecordsForHkeysAndCustomerId(hkeys, 0, {bypass_cache: true, full_certs_and_programs: true}).then(res => {
+        storage.getGSI2AuditRecordsForHkeysAndConfigKey(hkeys, "0", {bypass_cache: true, full_certs_and_programs: true}).then(res => {
             let headers = []
             let data = {}
             hotels.forEach(x => {
