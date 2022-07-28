@@ -763,6 +763,15 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                     })
             })
         }
+
+        const getActiveVerificationsForHkey = (hkey) => {
+            return new Promise((resolve, reject) => {
+                db.query(`SELECT * FROM gsi2_verifications_programs_view WHERE hkey = ${hkey} AND validity_end >= NOW()`, async (err2, res2, flds2) => {                 
+                    return resolve(res2)
+                })
+            })
+        }
+
         let _configScoreScale = null
         let getConfigScoreScale = async (configId) => {
             if (!!_configScoreScale) return _configScoreScale
@@ -901,6 +910,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 grade = configScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
                             }
 
+
                             outInner = {
                                 config_id: configId,
                                 assessment_level: obj.level,
@@ -912,8 +922,12 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                         max: maxPoints,
                                         percent: points/maxPoints
                                     }
-                                }
+                                } 
                             }
+                            
+                            let verifications = await getActiveVerificationsForHkey(hkey)
+                            verifications = verifications.map(x => x.program_scope)
+                            if (verifications.length > 0) outInner.verifications = verifications
                             
                             if (!grade) {
                                 let msg = `Config with ID ${configId} has grading not fully configured for ${points} points of hotel ${hkey}.`
