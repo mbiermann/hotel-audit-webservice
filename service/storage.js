@@ -728,9 +728,27 @@ exports.getHkeysForCustomer = (ref) => {
     })
 }
 
+const getTermsStatusForHkey = (hkey, version) => {
+    new Promise((resolve) => {
+        const cacheKey = `green_terms:${hkey}:${version}`
+        cache.get(cacheKey, (err, val) => {
+            if (!!val) resolve(parseInt(val))
+            db.query(`SELECT COUNT(*) > 0 AS available FROM hotels A
+                LEFT JOIN (SELECT hkey, 0 AS chain_id, \`version\` FROM green_terms UNION ALL SELECT 0 AS hkey, id, \`version\` FROM green_terms_group WHERE \`mode\` = "CHAIN") B 
+                ON A.hkey = B.hkey OR A.chain_id = B.chain_id
+                WHERE A.hkey = ${hkey} AND B.version = ${version}`, async (err, res, flds) => {
+                let termsAccepted = res[0].available
+                cache.set(cacheKey, `${termsAccepted}`, 'EX', process.env.REDIS_TTL)
+                resolve(termsAccepted)
+            })
+        })
+    })
+}
+
 let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
     const cacheFilter = SHA256(safeStringify(options))
     let shall_backfill = (options && options.backfill)
+    let bypass_cache = (options && options.bypass_cache)
     return new Promise(async (resolve, reject) => {
         let configId = '0'
         if (!!configKey) {
@@ -781,11 +799,10 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
         let proms = []
 
         // Fill in the footprint, program and certification data
-        let footprintAudits = await getGreenAuditRecordsForHkeys(leftHKeys, {full_certs_and_programs: true, backfill: shall_backfill, bypass_cache: shall_backfill})
+        let footprintAudits = await getGreenAuditRecordsForHkeys(leftHKeys, {full_certs_and_programs: true, backfill: shall_backfill, bypass_cache: bypass_cache, version: 2})
 
         leftHKeys.forEach(async hkey => {
             proms.push(new Promise(async (resolve2, reject2) => {
-                //let startTime = new Date();
                 const notAvailableRec = {
                     hkey: hkey,
                     status: false,
@@ -799,16 +816,18 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                 const returnError = (msg) => {
                     errorRec.msg = msg
                     cacheGSI2AuditRecord(configId, errorRec, cacheFilter)
-                    //console.log("Time passed", new Date().getTime() - startTime.getTime())
                     return resolve2(errorRec)
                 }
                 const returnNotAvailable = () => {
                     cacheGSI2AuditRecord(configId, notAvailableRec, cacheFilter)
-                    //console.log("Time passed", new Date().getTime() - startTime.getTime())
                     return resolve2(notAvailableRec)
                 }
 
                 try {
+                    let terms = await getTermsStatusForHkey(hkey, 2)
+                    // When there are no terms accepted and no backfilling requested, handle as not participating
+                    if (!terms && !shall_backfill) return returnNotAvailable()
+
                     let rec = {}
                     let obj = await getHotelLeastLevelCompletedForHkey(hkey)
 
@@ -834,7 +853,6 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         // Pack response
                         let out = Object.assign({hkey: hkey}, outInner, rec)
                         cacheGSI2AuditRecord(configId, out, cacheFilter)
-                        //console.log("Time passed", new Date().getTime() - startTime.getTime())
                         resolve2(out)    
                     }
 
@@ -850,13 +868,12 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         WHERE config_id IN (0,${configId})
                         LIMIT 1)`
 
-                    let isBackfillQuery = false
-                    
-                    if (obj.level === "NONE") {
+                  
+                    // When no level has been completed yet or backfilling is enabled without terms accepted, run migration or backfilling
+                    if (obj.level === "NONE" || (!terms && shall_backfill)) {
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (!!rec.footprint) {
                             if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
-                                isBackfillQuery = (shall_backfill && /backfill/.test(rec.footprint.type))
                                 query = `SELECT A.config_id, A.question_id, C.category, A.weight 
                                 FROM gsi2_config_question_weights A 
                                 LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id 
@@ -925,10 +942,12 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 } 
                             }
                             
-                            let verifications = await getActiveVerificationsForHkey(hkey)
-                            verifications = verifications.map(x => x.program_scope)
-                            if (verifications.length > 0) outInner.verifications = verifications
-                            
+                            if (terms) {
+                                let verifications = await getActiveVerificationsForHkey(hkey)
+                                verifications = verifications.map(x => x.program_scope)
+                                if (verifications.length > 0) outInner.verifications = verifications
+                            }
+
                             if (!grade) {
                                 let msg = `Config with ID ${configId} has grading not fully configured for ${points} points of hotel ${hkey}.`
                                 console.log(msg)
@@ -938,7 +957,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 return complete()
                             } 
 
-                            rec.type = `gsi2_self_inspection${isBackfillQuery && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
+                            rec.type = `gsi2_self_inspection${/backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
                             if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
@@ -1027,8 +1046,10 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                             let res = await Promise.all(evals)
                             
                             let backfillProms = []
-                            res.forEach(e => {
-                                if (shall_backfill && !/green_stay_self_inspection/.test(e.type)) {
+                            for (let i = 0; i < res.length; i++) {
+                                let e = res[i]
+                                let hasTermsAccepted = await getTermsStatusForHkey(e.hkey, ('version' in options ? options.version : 1))
+                                if (shall_backfill && (!/green_stay_self_inspection/.test(e.type) || !hasTermsAccepted)) {
                                     backfillProms.push(new Promise((resolve5, reject5) => {
                                         db.query(`SELECT * FROM green_hotels_backfill WHERE hkey = ${e.hkey}`, async (error, backfill, fields) => {
                                             if (backfill.length > 0) {
@@ -1042,7 +1063,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                                 } else {
                                     records[e.hkey] = e  
                                 }              
-                            })
+                            }
                             await Promise.all(backfillProms) 
                             Object.values(records).forEach(e => {
                                 cacheGreenAuditRecord(e, cacheFilter)  
