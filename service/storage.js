@@ -729,14 +729,17 @@ exports.getHkeysForCustomer = (ref) => {
 }
 
 const getTermsStatusForHkey = (hkey, version) => {
-    new Promise((resolve) => {
+    return new Promise((resolve) => {
         const cacheKey = `green_terms:${hkey}:${version}`
         cache.get(cacheKey, (err, val) => {
-            if (!!val) resolve(parseInt(val))
-            db.query(`SELECT COUNT(*) > 0 AS available FROM hotels A
-                LEFT JOIN (SELECT hkey, 0 AS chain_id, \`version\` FROM green_terms UNION ALL SELECT 0 AS hkey, id, \`version\` FROM green_terms_group WHERE \`mode\` = "CHAIN") B 
-                ON A.hkey = B.hkey OR A.chain_id = B.chain_id
-                WHERE A.hkey = ${hkey} AND B.version = ${version}`, async (err, res, flds) => {
+            if (!!val) return resolve(parseInt(val))
+            db.query(`SELECT COUNT(A.hkey) > 0 AS available
+            FROM hotels A
+            JOIN green_terms B ON A.hkey = B.hkey
+            JOIN green_terms_group C ON A.chain_id = C.id
+            WHERE A.hkey = ${hkey}
+            AND (B.version = ${version} OR C.version = ${version})
+            LIMIT 1`, async (err, res, flds) => {
                 let termsAccepted = res[0].available
                 cache.set(cacheKey, `${termsAccepted}`, 'EX', process.env.REDIS_TTL)
                 resolve(termsAccepted)
@@ -825,6 +828,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
                 try {
                     let terms = await getTermsStatusForHkey(hkey, 2)
+                    
                     // When there are no terms accepted and no backfilling requested, handle as not participating
                     if (!terms && !shall_backfill) return returnNotAvailable()
 
@@ -985,6 +989,16 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 }
 exports.getGSI2AuditRecordsForHkeysAndConfigKey = getGSI2AuditRecordsForHkeysAndConfigKey
 
+/**
+ * Creates the green audit record based on footprint record, footprint claim, exception or backfilling available.
+ * Consumed list of hkeys and options object.
+ * Options parameter `backfill` set to true triggers backfilling when no actual record or claim is available.
+ * Options parameter `bypass_cache` set to true triggers relying on the database only and not leveraging cached data.
+ * Options parameter `version` set triggers checking of terms accepted for version of GSI.
+ * Options parameter `full_certs_and_programs` set to true triggers all certs and programs to be reverted rather than only one in initial response version to not crash non-migreated clients.
+ * @param {Integer[]} hkeys 
+ * @param {Object} options 
+ */
 let getGreenAuditRecordsForHkeys = (hkeys, options) => {
     let shall_backfill = (options && options.backfill)
     const cacheFilter = SHA256(safeStringify(options))
