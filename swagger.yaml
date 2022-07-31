@@ -392,9 +392,13 @@ paths:
         type: "string"
       - name: "backfill"
         in: "query"
-        description: "***For internal and educational purposes only - should not be used in public production environments.***\nOptional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
-        required: false
+        description: "Optional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
         type: "boolean"
+      - name: "client_key"
+        in: "query"
+        description: "Optional key to use specific scoring configuration for Green Stay V2 audit records."
+        type: "string"
+        example: "fkey:31740"
       responses:
         "200":
           description: "Successful operation"
@@ -460,20 +464,27 @@ paths:
         type: "string"
       - name: "exclude"
         in: "query"
-        description: "Comma-separated list of audit categories to be excluded from response. Audit categories are 'touchless','cleansafe','green', 'geosure' and 'checkin'."
+        description: "Comma-separated list of audit categories to be excluded from response. Audit categories are 'touchless','cleansafe','green', 'gsi2', 'geosure' and 'checkin'."
         type: "string"
       - name: "include"
         in: "query"
-        description: "Comma-separated list of audit categories to be included from response. Audit categories are 'touchless','cleansafe','green', 'geosure' and 'checkin'."
+        description: "Comma-separated list of audit categories to be included from response. Audit categories are 'touchless','cleansafe','green', 'gsi2', 'geosure' and 'checkin'."
         type: "string"
       - name: "backfill"
         in: "query"
-        description: "***For internal and educational purposes only - should not be used in public production environments.***\nOptional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
+        description: "Optional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
         required: false
         type: "boolean"
+      - name: "client_key"
+        in: "query"
+        description: "Optional key to use specific scoring configuration for Green Stay V2 audit records."
+        type: "string"
+        example: "fkey:31740"
       responses:
         "200":
           description: "Successful operation"
+          examples:
+            application/json: {"9999998":[{"id":"85c1cb84-7150-4e3f-a83f-16a986a70949","created_date":"2022-07-28T12:22:39.000Z","updated_date":"2022-07-28T16:20:52.000Z","report_year":2019,"kilogramCarbonPOC":44.3212374407471,"literWaterPOC":21.825800591683155,"kilogramWastePOC":2.7533124908874362,"carbonClass":"A","waterClass":"A","wasteClass":"D","greenClass":"B","type":"green_stay_self_inspection_hero","status":true},{"config_id":"1","assessment_level":"PRO_LEVEL","scoring":{"score":4,"categories":{"energy":0.0380952380952381,"water":0.8333333333333334,"pollution":0,"waste":0.05434782608695652,"biodiversity":0,"purchasing":0,"mobility":0,"carbon":0.6666666666666666,"policy":1},"points":{"is":32.05,"max":116,"percent":0.27629310344827585}},"verifications":["CRITERIA"],"footprint":{"report_year":2019,"kilogramCarbonPOC":44.3212374407471,"literWaterPOC":21.825800591683155,"kilogramWastePOC":2.7533124908874362,"carbonClass":"A","waterClass":"A","wasteClass":"D","greenClass":"B","status":true,"type":"green_stay_self_inspection_hero"},"status":true,"type":"gsi2_self_inspection"},{"gs_id":"Q930405698","gs_distance":0.00004994672377396143,"date":"2022-07-31T10:00:05.000Z","gs_province":"North Rhine-Westphalia","gs_region":"European Union","gs_district":"Oespel","gs_city":"Dortmund","gs_country":"Germany","gs_type":"None","gs_countrycode":"DE","gs_population":0,"composite":78,"nightime":74,"physical":81,"women":78,"theft":65,"freedom":82,"health":72,"lgbtq":76,"type":"geosure","status":true}]}
         "401":
           description: "Unauthorized access"
         "403":
