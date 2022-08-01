@@ -1304,7 +1304,7 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
             for (let hkey of Object.keys(res)) {
                 let elem = res[hkey]
                 if (!audits[hkey]) audits[hkey] = []
-                audits[hkey].push(elem)
+                if (elem.type !== 'gsi2_not_available') audits[hkey].push(elem)
             }
         })
         proms.push(gsi2AuditRecordsFetch)   

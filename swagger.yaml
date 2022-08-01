@@ -483,8 +483,12 @@ paths:
       responses:
         "200":
           description: "Successful operation"
+          content:
+            application/json:
+              schema:
+                $ref: "#/definitions/GSI2AuditResponse"
           examples:
-            application/json: {"9999998":[{"id":"85c1cb84-7150-4e3f-a83f-16a986a70949","created_date":"2022-07-28T12:22:39.000Z","updated_date":"2022-07-28T16:20:52.000Z","report_year":2019,"kilogramCarbonPOC":44.3212374407471,"literWaterPOC":21.825800591683155,"kilogramWastePOC":2.7533124908874362,"carbonClass":"A","waterClass":"A","wasteClass":"D","greenClass":"B","type":"green_stay_self_inspection_hero","status":true},{"config_id":"1","assessment_level":"PRO_LEVEL","scoring":{"score":4,"categories":{"energy":0.0380952380952381,"water":0.8333333333333334,"pollution":0,"waste":0.05434782608695652,"biodiversity":0,"purchasing":0,"mobility":0,"carbon":0.6666666666666666,"policy":1},"points":{"is":32.05,"max":116,"percent":0.27629310344827585}},"verifications":["CRITERIA"],"footprint":{"report_year":2019,"kilogramCarbonPOC":44.3212374407471,"literWaterPOC":21.825800591683155,"kilogramWastePOC":2.7533124908874362,"carbonClass":"A","waterClass":"A","wasteClass":"D","greenClass":"B","status":true,"type":"green_stay_self_inspection_hero"},"status":true,"type":"gsi2_self_inspection"},{"gs_id":"Q930405698","gs_distance":0.00004994672377396143,"date":"2022-07-31T10:00:05.000Z","gs_province":"North Rhine-Westphalia","gs_region":"European Union","gs_district":"Oespel","gs_city":"Dortmund","gs_country":"Germany","gs_type":"None","gs_countrycode":"DE","gs_population":0,"composite":78,"nightime":74,"physical":81,"women":78,"theft":65,"freedom":82,"health":72,"lgbtq":76,"type":"geosure","status":true}]}
+            application/json: {"9999998":[{"id":"85c1cb84-7150-4e3f-a83f-16a986a70949","created_date":"2022-07-28T12:22:39.000Z","updated_date":"2022-07-28T16:20:52.000Z","report_year":2019,"kilogramCarbonPOC":44.3212374407471,"literWaterPOC":21.825800591683155,"kilogramWastePOC":2.7533124908874362,"carbonClass":"A","waterClass":"A","wasteClass":"D","greenClass":"B","type":"green_stay_self_inspection_hero","status":true},,{"gs_id":"Q930405698","gs_distance":0.00004994672377396143,"date":"2022-07-31T10:00:05.000Z","gs_province":"North Rhine-Westphalia","gs_region":"European Union","gs_district":"Oespel","gs_city":"Dortmund","gs_country":"Germany","gs_type":"None","gs_countrycode":"DE","gs_population":0,"composite":78,"nightime":74,"physical":81,"women":78,"theft":65,"freedom":82,"health":72,"lgbtq":76,"type":"geosure","status":true}]}
         "401":
           description: "Unauthorized access"
         "403":
@@ -968,3 +972,89 @@ definitions:
       token:
         type: "string"
         description: "Access token (JWT)"
+  
+  GSI2AuditResponse:
+    type: "object"
+    properties:
+      config_id:
+        type: "number"
+        description: "The scoring and weighting configuration applied. The configuration ID 0 presents the default configuration of HRS applied whenever no configuration key was provided to the request or no configuration could be found for a provided configuration key."
+        default: 0
+      assessment_level:
+        type: "string"
+        description: "The last highest assessment level completed by the property."
+        enum: ["BASIC_LEVEL", "ADV_LEVEL", "PRO_LEVEL"]
+      scoring:
+        type: "object"
+        properties:
+          score:
+            type: "number"
+          categories:
+            type: "object"
+            description: "Per cent score of points achieved on criteria confirmed per each of the eight environmental criteria category based on the points configured in the scoring configuration."
+            properties:
+              energy:
+                type: "number"
+              water:
+                type: "number"
+              waste:
+                type: "number"
+              biodiversity:
+                type: "number"
+              purchasing:
+                type: "number"
+              mobility:
+                type: "number"
+              carbon:
+                type: "number"
+          points:
+            description: "Summary of points achieved from all possible points."
+            type: "object"
+            properties:
+              is:
+                type: "number"
+              max:
+                type: "number"
+              percent:
+                type: "number"
+      verifications:
+        type: "array"
+        description: "List of verifications provided on the four area. Contains one or more verifications. Is not present when no verification is available."
+        items:
+          type: "string"
+          enum: ["CARBON_FOOTPRINT", "WATER_FOOTPRINT", "WASTE_FOOTPRINT", "CRITERIA"]
+      footprint:
+        type: "object"
+        properties:
+          report_year:
+            type: "number"
+            enum: [2019,2021]
+          kilogramCarbonPOC:
+            type: "number"
+          literWaterPOC:
+            type: "number"
+          kilogramWastePOC:
+            type: "number"
+          carbonClass:
+            type: "string"
+            enum: ["A","B","C","D"]
+          waterClass:
+            type: "string"
+            enum: ["A","B","C","D"]
+          wasteClass:
+            type: "string"
+            enum: ["A","B","C","D"]
+          status:
+            type: "boolean"
+            description: "Indicates whether the audit was successful."
+          type:
+            type: "string"
+            description: "The type of audit result. (<mode> number represents the backfilling mode applied.)"
+            enum: ["green_stay_self_inspection", "green_stay_self_inspection_hero", "green_stay_blocked_filter", "green_stay_self_blocked_anomaly", "green_stay_not_applicable", "green_stay_backfill_mode_<mode>"]
+      status:
+        type: "boolean"
+        description: "Indicates whether the audit was successful."
+      type:
+        type: "string"
+        description: "The type of audit result. (<mode> number represents the backfilling mode applied.)"
+        enum: ["gsi2_not_error", "gsi2_self_inspection", "gsi2_self_inspection_hero", "gsi2_backfill", "gsi2_backfill_hero"]

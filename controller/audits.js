@@ -250,7 +250,7 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                     if (!(hkey in data)) data[hkey] = []
                     let record = _gsi2[hkey]
                     delete record.hkey
-                    data[hkey].push(record)
+                    if (record.type !== 'gsi2_not_available') data[hkey].push(record)
                 }
             }
             if (!(exclude.includes('geosure'))) {
