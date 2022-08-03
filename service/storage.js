@@ -777,7 +777,8 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
         const getHotelLeastLevelCompletedForHkey = (hkey) => {
             return new Promise((resolve, reject) => {
-                db.query(`SELECT A.\`_id\` AS \`level\` FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 1) GROUP BY A._id`, 
+                let q = `SELECT A.\`_id\` AS \`level\` FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 1) GROUP BY A._id`
+                db.query(q, 
                     async (err2, res2, flds2) => {                        
                         if (res2.length === 0) return resolve({level: "NONE"})
                         return resolve({level: res2[0].level})
@@ -833,7 +834,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                     if (!terms && !shall_backfill) return returnNotAvailable()
 
                     let rec = {}
-                    let obj = await getHotelLeastLevelCompletedForHkey(hkey)
+                    let obj = terms ? await getHotelLeastLevelCompletedForHkey(hkey) : {level: 'NONE'}
 
                     let footprintAudit = footprintAudits[hkey]
                     if (footprintAudit) {
@@ -885,8 +886,8 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                     SELECT MAX(config_id) AS config_id FROM gsi2_config_question_weights WHERE config_id IN (0,${configId}) LIMIT 1
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
                                 migrationMode = true
-                                obj.level = 'ADV_LEVEL'
-                                obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
+                                //obj.level = 'ADV_LEVEL'
+                                //obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
                             } else { // Otherwise when no assessment/level was completed and footprint was not successful
                                 rec.type = `gsi2_not_available`
                                 rec.status = false

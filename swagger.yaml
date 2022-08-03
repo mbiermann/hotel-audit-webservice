@@ -983,7 +983,7 @@ definitions:
       assessment_level:
         type: "string"
         description: "The last highest assessment level completed by the property."
-        enum: ["BASIC_LEVEL", "ADV_LEVEL", "PRO_LEVEL"]
+        enum: ["NONE", "BASIC_LEVEL", "ADV_LEVEL", "PRO_LEVEL"]
       scoring:
         type: "object"
         properties:
