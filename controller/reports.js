@@ -20,6 +20,13 @@ if (process.env.MODE === 'REPORT') {
         await storage.uploadFile(filePath)
         trackEvent('Audit Web Service', 'GSI2 Report Created')
     })
+
+    router.patch('/green-report', async (_, resp) => {
+        resp.status(200).send()
+        let filePath = await createReport('green')
+        await storage.uploadFile(filePath)
+        trackEvent('Audit Web Service', 'GSI1 Report Created')
+    })
 }
 
 router.get('/green-report', combinedAuthMiddleware, async (_, resp) => {

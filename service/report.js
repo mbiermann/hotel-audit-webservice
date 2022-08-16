@@ -33,7 +33,7 @@ module.exports = {
                     let statuses = await storage.getHotelStatusByHkeys(hkeys, programs, true, true, false, true, ['code'])
                     for (let j = 0; j < statuses.length; j++) {
                         for (key of Object.keys(statuses[j])) if (headers.indexOf(key) === -1 && !!statuses[j][key]) headers.push(key)
-                        cache.set(`${reportKey}:${index}`, JSON.stringify(statuses[j]), 'EX', 1000)
+                        cache.set(`${reportKey}:${index}`, JSON.stringify(statuses[j]), 'EX', 4000)
                         index++
                     }
                     logger.logEvent(logger.ReportRunStatusUpdate, {page: i, incr: incr, count_statuses: statuses.length})

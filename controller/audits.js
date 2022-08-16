@@ -290,6 +290,11 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 })
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
+    resp.setHeader('Content-Disposition', 'attachment;filename=green-report.zip')
+    storage.readFileStream('green_out.csv.zip').pipe(resp)
+})
+
+router.get('/gsi2/reports/all', combinedAuthMiddleware, async (req, resp) => {
     resp.setHeader('Content-Disposition', 'attachment;filename=gsi2-report.zip')
     storage.readFileStream('gsi2_out.csv.zip').pipe(resp)
 })

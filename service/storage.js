@@ -962,7 +962,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 return complete()
                             } 
 
-                            rec.type = `gsi2_self_inspection${/backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
+                            rec.type = `gsi2_self_inspection${rec.footprint && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
                             if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
