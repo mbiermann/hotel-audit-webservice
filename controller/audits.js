@@ -11,6 +11,8 @@ const { writeToString } = require('@fast-csv/format')
 const flatten = require('flat')
 const xlsx = require('node-xlsx')
 const CryptoJS = require('crypto-js')
+const fs = require('fs')
+const testData = JSON.parse(fs.readFileSync('./gsi2-testing.json', 'utf8'))
 
 let projectId = process.env.GC_PROJECT_ID
 const logging = new Logging({ projectId });
@@ -246,7 +248,10 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                 }
             }
             if (!(exclude.includes('gsi2'))) {
-                if (hkey in _gsi2) {
+                if (('procurement-testing' == req.query.environment) && (hkey in testData.tests)) {
+                    if (!(hkey in data)) data[hkey] = []
+                    data[hkey].push(testData.scenarios[testData.tests[hkey]])    
+                } else if (hkey in _gsi2) {
                     if (!(hkey in data)) data[hkey] = []
                     let record = _gsi2[hkey]
                     delete record.hkey

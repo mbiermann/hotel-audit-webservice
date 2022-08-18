@@ -1,0 +1,419 @@
+{
+    "tests": {
+        "709695": "BASIC-1",
+        "658495": "BASIC-2",
+        "542410": "BASIC-3",
+        "542350": "ADVANCED-1",
+        "542349": "ADVANCED-2",
+        "542348": "ADVANCED-3",
+        "542347": "PRO-1",
+        "542345": "PRO-2",
+        "542344": "PRO-3"
+    },
+    "scenarios": {
+        "BASIC-1": {
+            "config_id": "0",
+            "assessment_level": "BASIC_LEVEL",
+            "scoring": {
+                "score": 5,
+                "categories": {
+                    "policy": 1,
+                    "biodiversity": 0,
+                    "energy": 0,
+                    "water": 0,
+                    "waste": 1,
+                    "pollution": 1,
+                    "purchasing": 0,
+                    "mobility": 1
+                },
+                "points": {
+                    "is": 50,
+                    "max": 100,
+                    "percent": 0.5
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 30.75010217,
+                "literWaterPOC": 1077.275829,
+                "kilogramWastePOC": 0,
+                "carbonClass": "B",
+                "waterClass": "C",
+                "wasteClass": "A",
+                "greenClass": "B",
+                "status": true,
+                "type": "green_stay_backfill_mode_1",
+                "original_type": "green_stay_not_available"
+            },
+            "status": true,
+            "type": "gsi2_self_inspection_backfill_hero"
+        },
+        "BASIC-2": {
+            "config_id": "0",
+            "assessment_level": "BASIC_LEVEL",
+            "scoring": {
+                "score": 7,
+                "categories": {
+                    "policy": 1,
+                    "biodiversity": 0,
+                    "energy": 0.5,
+                    "water": 0,
+                    "waste": 1,
+                    "pollution": 1,
+                    "purchasing": 1,
+                    "mobility": 1
+                },
+                "points": {
+                    "is": 70,
+                    "max": 100,
+                    "percent": 0.7
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 4.738501752,
+                "literWaterPOC": 29.63523233,
+                "kilogramWastePOC": 0.143784638,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_backfill_mode_0",
+                "original_type": "green_stay_not_applicable"
+            },
+            "certs": [
+                {
+                    "cert_id": "239874",
+                    "validity_start": "2022-01-01T00:00:00.000Z",
+                    "validity_end": "2022-12-31T00:00:00.000Z",
+                    "url": "https://greensign.de",
+                    "issuer": "GreenSign"
+                }
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_backfill_hero"
+        },
+        "BASIC-3": {
+            "config_id": "0",
+            "assessment_level": "BASIC_LEVEL",
+            "scoring": {
+                "score": 10,
+                "categories": {
+                    "policy": 1,
+                    "biodiversity": 1,
+                    "energy": 1,
+                    "water": 1,
+                    "waste": 1,
+                    "pollution": 1,
+                    "purchasing": 1,
+                    "mobility": 1
+                },
+                "points": {
+                    "is": 100,
+                    "max": 100,
+                    "percent": 1
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 4.738501752,
+                "literWaterPOC": 29.63523233,
+                "kilogramWastePOC": 0.143784638,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_backfill_mode_0",
+                "original_type": "green_stay_not_applicable"
+            },
+            "certs": [
+                {
+                    "cert_id": "239874",
+                    "validity_start": "2022-01-01T00:00:00.000Z",
+                    "validity_end": "2022-12-31T00:00:00.000Z",
+                    "url": "https://greensign.de",
+                    "issuer": "GreenSign"
+                }
+            ],
+            "programs": [
+                {
+                    "name": "Pathway to Net Positive",
+                    "link": "https://sustainablehospitalityalliance.org/our-work/pathway/"
+                }
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_backfill_hero"
+        },
+        "ADVANCED-1": {
+            "config_id": "0",
+            "assessment_level": "ADVANCED_LEVEL",
+            "scoring": {
+                "score": 2,
+                "categories": {
+                    "policy": 0,
+                    "water": 0.18181818181818182,
+                    "waste": 0.29411764705882354,
+                    "purchasing": 0,
+                    "biodiversity": 0,
+                    "pollution": 0,
+                    "energy": 0,
+                    "carbon": 1
+                },
+                "points": {
+                    "is": 12,
+                    "max": 87,
+                    "percent": 0.13793103448275862
+                }
+            },
+            "report_year": 2021,
+            "kilogramCarbonPOC": 8,
+            "literWaterPOC": 23,
+            "kilogramWastePOC": 0.1,
+            "carbonClass": "A",
+            "waterClass": "A",
+            "wasteClass": "A",
+            "greenClass": "A",
+            "status": true,
+            "type": "green_stay_self_inspection_hero"
+        },
+        "ADVANCED-2": {
+            "config_id": "0",
+            "assessment_level": "ADVANCED_LEVEL",
+            "scoring": {
+                "score": 6,
+                "categories": {
+                    "policy": 0.6666666666666666,
+                    "water": 0.45454545454545453,
+                    "waste": 0.8235294117647058,
+                    "purchasing": 0.3333333333333333,
+                    "biodiversity": 0.5,
+                    "pollution": 0.3333333333333333,
+                    "energy": 0.5,
+                    "carbon": 1
+                },
+                "points": {
+                    "is": 51,
+                    "max": 87,
+                    "percent": 0.5862068965517241
+                }
+            },
+            "footprint": {
+                "report_year": 2021,
+                "kilogramCarbonPOC": 38,
+                "literWaterPOC": 233,
+                "kilogramWastePOC": 0.45,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_self_inspection_hero"
+            },
+            "certs": [
+                {
+                    "cert_id": "239874",
+                    "validity_start": "2022-01-01T00:00:00.000Z",
+                    "validity_end": "2022-12-31T00:00:00.000Z",
+                    "url": "https://greensign.de",
+                    "issuer": "GreenSign"
+                }
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_hero"
+        },
+        "ADVANCED-3": {
+            "config_id": "0",
+            "assessment_level": "ADVANCED_LEVEL",
+            "scoring": {
+                "score": 8,
+                "categories": {
+                    "policy": 0.8333333333333334,
+                    "water": 0.45454545454545453,
+                    "waste": 1,
+                    "purchasing": 1,
+                    "biodiversity": 1,
+                    "pollution": 0.6666666666666666,
+                    "energy": 0.75,
+                    "carbon": 1
+                },
+                "points": {
+                    "is": 72,
+                    "max": 87,
+                    "percent": 0.8275862068965517
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 4.738501752,
+                "literWaterPOC": 29.63523233,
+                "kilogramWastePOC": 0.143784638,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_self_inspection_hero"
+            },
+            "certs": [
+                {
+                    "cert_id": "239874",
+                    "validity_start": "2022-01-01T00:00:00.000Z",
+                    "validity_end": "2022-12-31T00:00:00.000Z",
+                    "url": "https://greensign.de",
+                    "issuer": "GreenSign"
+                }
+            ],
+            "programs": [
+                {
+                    "name": "Pathway to Net Positive",
+                    "link": "https://sustainablehospitalityalliance.org/our-work/pathway/"
+                }
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_hero"
+        },
+        "PRO-1": {
+            "config_id": "0",
+            "assessment_level": "PRO_LEVEL",
+            "scoring": {
+                "score": 2,
+                "categories": {
+                    "energy": 0,
+                    "water": 0.16666666666666666,
+                    "pollution": 0,
+                    "waste": 0.25,
+                    "biodiversity": 0,
+                    "purchasing": 0,
+                    "mobility": 0,
+                    "carbon": 1
+                },
+                "points": {
+                    "is": 12,
+                    "max": 92,
+                    "percent": 0.13043478260869565
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 4.738501752,
+                "literWaterPOC": 29.63523233,
+                "kilogramWastePOC": 0.143784638,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_self_inspection_hero"
+            },
+            "verifications": [
+                "WASTE_FOOTPRINT"
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_hero"
+        },
+        "PRO-2": {
+            "config_id": "0",
+            "assessment_level": "PRO_LEVEL",
+            "scoring": {
+                "score": 6,
+                "categories": {
+                    "energy": 0.4066666666666668,
+                    "water": 0.625,
+                    "pollution": 0.6,
+                    "waste": 0.3583333333333334,
+                    "biodiversity": 0.07142857142857142,
+                    "purchasing": 0.5695652173913044,
+                    "mobility": 0.6000000000000001,
+                    "carbon": 1
+                },
+                "points": {
+                    "is": 59.60000000000001,
+                    "max": 122,
+                    "percent": 0.4885245901639345
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 4.738501752,
+                "literWaterPOC": 29.63523233,
+                "kilogramWastePOC": 0.143784638,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_self_inspection_hero"
+            },
+            "verifications": [
+                "CARBON_FOOTPRINT"
+            ],
+            "certs": [
+                {
+                    "cert_id": "239874",
+                    "validity_start": "2022-01-01T00:00:00.000Z",
+                    "validity_end": "2022-12-31T00:00:00.000Z",
+                    "url": "https://greensign.de",
+                    "issuer": "GreenSign"
+                }
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_hero"
+        },
+        "PRO-3": {
+            "config_id": "0",
+            "assessment_level": "PRO_LEVEL",
+            "scoring": {
+                "score": 6,
+                "categories": {
+                    "energy": 0.4066666666666668,
+                    "water": 0.625,
+                    "pollution": 0.6,
+                    "waste": 0.3583333333333334,
+                    "biodiversity": 0.07142857142857142,
+                    "purchasing": 0.5695652173913044,
+                    "mobility": 0.6000000000000001,
+                    "carbon": 1
+                },
+                "points": {
+                    "is": 59.60000000000001,
+                    "max": 122,
+                    "percent": 0.4885245901639345
+                }
+            },
+            "footprint": {
+                "report_year": 2019,
+                "kilogramCarbonPOC": 4.738501752,
+                "literWaterPOC": 29.63523233,
+                "kilogramWastePOC": 0.143784638,
+                "carbonClass": "A",
+                "waterClass": "A",
+                "wasteClass": "A",
+                "greenClass": "A",
+                "status": true,
+                "type": "green_stay_self_inspection_hero"
+            },
+            "verifications": [
+                "WASTE_FOOTPRINT"
+            ],
+            "certs": [
+                {
+                    "cert_id": "239874",
+                    "validity_start": "2022-01-01T00:00:00.000Z",
+                    "validity_end": "2022-12-31T00:00:00.000Z",
+                    "url": "https://greensign.de",
+                    "issuer": "GreenSign"
+                }
+            ],
+            "programs": [
+                {
+                    "name": "Pathway to Net Positive",
+                    "link": "https://sustainablehospitalityalliance.org/our-work/pathway/"
+                }
+            ],
+            "status": true,
+            "type": "gsi2_self_inspection_hero"
+        }
+    }
+}

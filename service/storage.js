@@ -50,8 +50,13 @@ const getCachedAuditRecordsForHkeys = (hkeys) => {
                         for (let key of keys) {
                             _proms.push(new Promise((resolve2) => {
                                 cache.get(key, (err, val) => {
-                                    if (!(hkey in data)) data[hkey] = []
-                                    data[hkey].push(JSON.parse(val))
+                                    if (err) {
+                                        console.log(`Error querying cache with key ${key}: ${err}.`)
+                                    }
+                                    if (val) {
+                                        if (!(hkey in data)) data[hkey] = []
+                                        data[hkey].push(JSON.parse(val))
+                                    }
                                     resolve2()
                                 })
                             }))
@@ -804,7 +809,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
         // Fill in the footprint, program and certification data
         let footprintAudits = await getGreenAuditRecordsForHkeys(leftHKeys, {full_certs_and_programs: true, backfill: shall_backfill, bypass_cache: bypass_cache, version: 2})
-
+        
         leftHKeys.forEach(async hkey => {
             proms.push(new Promise(async (resolve2, reject2) => {
                 const notAvailableRec = {
