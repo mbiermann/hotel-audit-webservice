@@ -44,14 +44,15 @@ const getCachedAuditRecordsForHkeys = (hkeys) => {
         let proms = []
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
-                cache.smembers(hkey, (err, keys) => {
+                cache.smembers(hkey, (err1, keys) => {
+                    if (err1) return resolve1()
                     let _proms = []
                     if (keys.length > 0) {
                         for (let key of keys) {
                             _proms.push(new Promise((resolve2) => {
-                                cache.get(key, (err, val) => {
-                                    if (err) {
-                                        console.log(`Error querying cache with key ${key}: ${err}.`)
+                                cache.get(key, (err2, val) => {
+                                    if (err2) {
+                                        console.log(`Error querying cache with key ${key}: ${err2}.`)
                                     }
                                     if (val) {
                                         if (!(hkey in data)) data[hkey] = []
