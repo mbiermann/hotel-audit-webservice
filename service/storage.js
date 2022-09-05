@@ -420,7 +420,7 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
     const cacheKey = `carbon_benchmark:${emissionLocation}:${i.report_year}`
     let cacheProm = new Promise((resolve, reject) => {
         cache.get(cacheKey, (err, benchmark) => {
-            if (err) reject(err)
+            if (err) return reject(err)
             resolve(JSON.parse(benchmark))
         })
     })
