@@ -45,13 +45,13 @@ const getCachedAuditRecordsForHkeys = (hkeys) => {
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
                 cache.smembers(hkey, (err1, keys) => {
-                    if (err1) return resolve1()
+                    if (!!err1) return resolve1()
                     let _proms = []
                     if (keys.length > 0) {
                         for (let key of keys) {
                             _proms.push(new Promise((resolve2) => {
                                 cache.get(key, (err2, val) => {
-                                    if (err2) {
+                                    if (!!err2) {
                                         console.log(`Error querying cache with key ${key}: ${err2}.`)
                                     }
                                     if (val) {
@@ -421,7 +421,7 @@ let benchmarkCarbonEmission = async (i, emissionLocation) => {
     const cacheKey = `carbon_benchmark:${emissionLocation}:${i.report_year}`
     let cacheProm = new Promise((resolve, reject) => {
         cache.get(cacheKey, (err, benchmark) => {
-            if (err) return reject(err)
+            if (!!err) return resolve(null)
             resolve(JSON.parse(benchmark))
         })
     })
@@ -837,7 +837,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                     let terms = await getTermsStatusForHkey(hkey, 2)
                     
                     // When there are no terms accepted and no backfilling requested, handle as not participating
-                    if (!terms && !shall_backfill) return returnNotAvailable()
+                    //if (!terms && !shall_backfill) return returnNotAvailable()
 
                     let rec = {}
                     let obj = terms ? await getHotelLeastLevelCompletedForHkey(hkey) : {level: 'NONE'}
@@ -881,7 +881,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
                   
                     // When no level has been completed yet or backfilling is enabled without terms accepted, run migration or backfilling
-                    if (obj.level === "NONE" || (!terms && shall_backfill)) {
+                    if (obj.level === "NONE" || (/*!terms && */shall_backfill)) {
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (!!rec.footprint) {
                             if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
@@ -892,8 +892,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                     SELECT MAX(config_id) AS config_id FROM gsi2_config_question_weights WHERE config_id IN (0,${configId}) LIMIT 1
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
                                 migrationMode = true
-                                //obj.level = 'ADV_LEVEL'
-                                //obj.assessments = "'ADV_HOTEL_IND','HOTEL_FPR','HOTEL_CRT'"
+                                obj.level = 'ADV_LEVEL'
                             } else { // Otherwise when no assessment/level was completed and footprint was not successful
                                 rec.type = `gsi2_not_available`
                                 rec.status = false
@@ -969,6 +968,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                             } 
 
                             rec.type = `gsi2_self_inspection${rec.footprint && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
+                            if (!terms && migrationMode) rec.type += '_migration'
                             if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
@@ -1069,8 +1069,8 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                             let backfillProms = []
                             for (let i = 0; i < res.length; i++) {
                                 let e = res[i]
-                                let hasTermsAccepted = await getTermsStatusForHkey(e.hkey, ('version' in options ? options.version : 1))
-                                if (shall_backfill && (!/green_stay_self_inspection/.test(e.type) || !hasTermsAccepted)) {
+                                let hasTermsAccepted = await getTermsStatusForHkey(e.hkey, null)
+                                if (shall_backfill && (!/green_stay_self_inspection/.test(e.type)/* || !hasTermsAccepted*/)) {
                                     backfillProms.push(new Promise((resolve5, reject5) => {
                                         db.query(`SELECT * FROM green_hotels_backfill WHERE hkey = ${e.hkey}`, async (error, backfill, fields) => {
                                             if (backfill.length > 0) {
@@ -1209,6 +1209,7 @@ const getCachedGeosureRecordsForHkeys = (hkeys) => {
         let data = {}
         let proms = hkeys.map((hkey) => new Promise((resolve, reject) => {
             cache.get(`geosure:${hkey}`, (err, val) => {
+                if (!!err) return resolve()
                 if (val !== null) data[hkey] = JSON.parse(val)
                 resolve()
             })
