@@ -850,6 +850,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                             rec.footprint[x] = footprintAudit[x]
                         })
                         if (!!footprintAudit.anomalies) rec.footprint.anomalies = footprintAudit.anomalies
+                        rec.footprint.partial_backfills = footprintAudit.partial_backfills
                         rec.footprint.status = footprintAudit.status
                         rec.footprint.type = footprintAudit.type
                         if (!!footprintAudit.original_type) rec.footprint.original_type = footprintAudit.original_type
@@ -967,8 +968,8 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 return complete()
                             } 
 
-                            rec.type = `gsi2_self_inspection${rec.footprint && /backfill/.test(rec.footprint.type) ? '_backfill' : ''}`
-                            if (!terms && migrationMode) rec.type += '_migration'
+                            rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[1-9]+/, '').replace('_hero', '')
+                            if (!terms && migrationMode) rec.type += '_migpend'
                             if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
@@ -1069,14 +1070,34 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                             let backfillProms = []
                             for (let i = 0; i < res.length; i++) {
                                 let e = res[i]
+                                let isMissingWasteData = (e.kilogramWastePOC == -1)
+                                let isMissingWaterData = (e.literWaterPOC == -1)
                                 let hasTermsAccepted = await getTermsStatusForHkey(e.hkey, null)
-                                if (shall_backfill && (!/green_stay_self_inspection/.test(e.type)/* || !hasTermsAccepted*/)) {
+                                if ((shall_backfill && (!/green_stay_self_inspection/.test(e.type)/* || !hasTermsAccepted*/)) || (shall_backfill && (isMissingWasteData || isMissingWaterData))) {
                                     backfillProms.push(new Promise((resolve5, reject5) => {
                                         db.query(`SELECT * FROM green_hotels_backfill WHERE hkey = ${e.hkey}`, async (error, backfill, fields) => {
                                             if (backfill.length > 0) {
                                                 let obj = await evalGreenBackfillRecord(backfill[0])
                                                 obj.original_type = e.type
-                                                records[e.hkey] = obj
+                                                let partialBackfills = []
+                                                if (isMissingWasteData) {
+                                                    e.kilogramWastePOC = obj.kilogramWastePOC
+                                                    e.wasteClass = obj.wasteClass
+                                                    partialBackfills.push('WASTE_FOOTPRINT')
+                                                }
+                                                if (isMissingWasteData) {
+                                                    e.literWaterPOC = obj.literWaterPOC
+                                                    e.waterClass = obj.waterClass
+                                                    partialBackfills.push('WATER_FOOTPRINT')
+                                                }
+                                                if (partialBackfills.length > 0) {
+                                                    e.partial_backfills = partialBackfills
+                                                    e.original_type = e.type
+                                                    e.type = obj.type.replace('backfill', 'partial_backfill')                                                    
+                                                    records[e.hkey] = e
+                                                } else {
+                                                    records[e.hkey] = obj
+                                                }
                                             }
                                             resolve5()
                                         })
