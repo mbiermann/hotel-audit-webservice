@@ -970,7 +970,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
                             rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[1-9]+/, '').replace('_hero', '')
                             if (!terms && migrationMode) rec.type += '_migpend'
-                            if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
+                            if (!/backfill/.test(rec.type) && grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
                             return returnNotAvailable()
