@@ -394,7 +394,7 @@ paths:
         in: "query"
         description: "Optional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
         type: "boolean"
-      - name: "client_key"
+      - name: "config_key"
         in: "query"
         description: "Optional key to use specific scoring configuration for Green Stay V2 audit records."
         type: "string"
@@ -475,7 +475,7 @@ paths:
         description: "Optional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
         required: false
         type: "boolean"
-      - name: "client_key"
+      - name: "config_key"
         in: "query"
         description: "Optional key to use specific scoring configuration for Green Stay V2 audit records."
         type: "string"
