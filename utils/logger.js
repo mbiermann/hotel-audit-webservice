@@ -14,6 +14,7 @@ class Logger {
         this.ReportError = "ReportError",
         this.EventSecretKeyError = "EventSecretKeyError",
         this.EventBlockedAccessError = "EventBlockedAccessError",
+        this.EventUnblock = "EventUnblock"
         this.ReportRunStatusUpdate = "ReportRunStatusUpdate"
     }
 

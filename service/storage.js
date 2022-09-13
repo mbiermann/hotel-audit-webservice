@@ -915,7 +915,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 if (r.weight > 0) {
                                     let map = {GSI_FPR_WATER_GRADE: 'waterClass', GSI_FPR_WASTE_GRADE: 'wasteClass', GSI_FPR_CARBON_GRADE: 'carbonClass', GSI_FPR_GREENSTAY_GRADE: 'greenClass'}
                                     let mapClass = (cls) => {return ((['D','C','B','A'].indexOf(cls) + 1)/4)}
-                                    r.response = map.hasOwnProperty(r.question_id) ? mapClass(rec.footprint[map[r.question_id]]) : r.response
+                                    r.response = map.hasOwnProperty(r.question_id) && rec.hasOwnProperty("footprint") && rec.footprint.hasOwnProperty(map[r.question_id]) ? mapClass(rec.footprint[map[r.question_id]]) : r.response
                                     if (!(r.category in achievePerCategory)) achievePerCategory[r.category] = {score: 0, total: 0}
                                     achievePerCategory[r.category].total += r.weight
                                     let score = parseFloat(r.response) * r.weight
@@ -968,8 +968,13 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 return complete()
                             } 
 
-                            rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[1-9]+/, '').replace('_hero', '')
-                            if (!terms && migrationMode) rec.type += '_migpend'
+                            //console.log(query, outInner, rec)
+                            if (rec.footprint) {
+                                rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[0-9]+/, '').replace('_hero', '')
+                                if (!terms && migrationMode && rec.footprint.original_type != 'green_stay_not_available') rec.type += '_migpend'
+                            } else {
+                                rec.type = 'gsi2_self_inspection'
+                            }
                             if (!/backfill/.test(rec.type) && grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = true
                         } else {
@@ -1085,7 +1090,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                                                     e.wasteClass = obj.wasteClass
                                                     partialBackfills.push('WASTE_FOOTPRINT')
                                                 }
-                                                if (isMissingWasteData) {
+                                                if (isMissingWaterData) {
                                                     e.literWaterPOC = obj.literWaterPOC
                                                     e.waterClass = obj.waterClass
                                                     partialBackfills.push('WATER_FOOTPRINT')

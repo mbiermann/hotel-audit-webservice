@@ -3,7 +3,6 @@ const router = express.Router()
 const storage = require('../service/storage')
 const { trackEvent } = require('../service/tracking')
 const { combinedAuthMiddleware: combinedAuthMiddleware } = require('../utils/auth-middleware')
-const blocker = require('../utils/blocked-middleware')
 
 router.get('/:id', combinedAuthMiddleware, async (req, resp) => {
     storage.getCheckinConfigByID(req.params.id).then(res => {

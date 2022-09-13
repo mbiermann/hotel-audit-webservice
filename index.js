@@ -6,7 +6,6 @@ const cors = require('cors')
 const app = express();
 const logger = require('./utils/logger')
 const package = require('./package.json')
-const blocker = require('./utils/blocked-middleware')
 const v1 = require('./controller/v1.js')
 const v2 = require('./controller/v2.js')
 const auth = require('./controller/auth.js')
@@ -27,7 +26,6 @@ app.use(cors())
 
 app.use(jwtAuthMiddleware)
 app.use('/auth', auth)
-app.use(blocker.middleware)
 app.use('/v1', v1)
 app.use('/v2', v2)
 

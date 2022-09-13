@@ -14,7 +14,8 @@ const _validateRateLimitAccess = (req, clientID, settings) => {
         var ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress
         ip = ip.split(",")[0]
         //console.log("IP is", ip, "with settings", JSON.stringify(settings))
-        if (!settings.rate_limit_max || !settings.rate_limit_window) reject(new Error(`Insufficient settings for client ID ${clientID}`))
+        //console.log(!settings.rate_limit_max || !settings.rate_limit_window)
+        if (!settings.rate_limit_max || !settings.rate_limit_window) return resolve()
         const rateLimiter = new RateLimiterRedis({
             storeClient: redisClient,
             keyPrefix: 'rate-limiter',
@@ -22,10 +23,11 @@ const _validateRateLimitAccess = (req, clientID, settings) => {
             duration: settings.rate_limit_window
         })
         return rateLimiter.consume(ip).then((rate) => {
-            //console.log(settings.grants, new RegExp(settings.grants))
-            if ((settings.grants === 'general_access') || req.originalUrl.match(new RegExp(settings.grants))) resolve()
+            //console.log(rate, settings.grants, new RegExp(settings.grants), req.originalUrl.match(new RegExp(settings.grants)))
+            if ((settings.grants === 'general_access') || req.originalUrl.match(new RegExp(settings.grants))) return resolve()
             reject(new Error(`Path not allowed for client ID ${clientID}`))            
         }).catch(err => {
+            //console.log(err)
             reject(new Error(`Too many requests for client ID ${clientID} from IP ${ip} with count ${err.consumedPoints} but allowed only ${settings.rate_limit_max}`))
         })
     })
