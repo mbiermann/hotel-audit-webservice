@@ -1,6 +1,6 @@
 swagger: "2.0"
 info:
-  version: "2.0.0"
+  version: "2.0.1"
   title: "Hotel Audit System API"
   description: "Please consider that resources with a lock require a valid secretKey query parameter on the /v1 path (\"v1_auth\") and a valid JWT access token (\"v2_auth_query\" or \"v2_auth_header\") on the /v2 path."
   contact:

@@ -739,13 +739,14 @@ const getTermsStatusForHkey = (hkey, version) => {
         const cacheKey = `green_terms:${hkey}:${version}`
         cache.get(cacheKey, (err, val) => {
             if (!!val) return resolve(parseInt(val))
-            db.query(`SELECT COUNT(A.hkey) > 0 AS available
+            let q = `SELECT COUNT(A.hkey) > 0 AS available
             FROM hotels A
-            JOIN green_terms B ON A.hkey = B.hkey
-            JOIN green_terms_group C ON A.chain_id = C.id
+            LEFT JOIN green_terms B ON A.hkey = B.hkey
+            LEFT JOIN green_terms_group C ON A.chain_id = C.id
             WHERE A.hkey = ${hkey}
             AND (B.version = ${version} OR C.version = ${version})
-            LIMIT 1`, async (err, res, flds) => {
+            LIMIT 1`
+            db.query(q, async (err, res, flds) => {
                 let termsAccepted = res[0].available
                 cache.set(cacheKey, `${termsAccepted}`, 'EX', process.env.REDIS_TTL)
                 resolve(termsAccepted)
@@ -826,6 +827,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                 const returnError = (msg) => {
                     errorRec.msg = msg
                     cacheGSI2AuditRecord(configId, errorRec, cacheFilter)
+                    console.log("GSI2 Error", errorRec)
                     return resolve2(errorRec)
                 }
                 const returnNotAvailable = () => {
@@ -843,6 +845,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                     let obj = terms ? await getHotelLeastLevelCompletedForHkey(hkey) : {level: 'NONE'}
 
                     let footprintAudit = footprintAudits[hkey]
+
                     if (footprintAudit) {
                         const fields = ['report_year', 'kilogramCarbonPOC', 'literWaterPOC', 'kilogramWastePOC', 'carbonClass', 'waterClass', 'wasteClass', 'greenClass']
                         fields.forEach(x => {
@@ -854,8 +857,8 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         rec.footprint.status = footprintAudit.status
                         rec.footprint.type = footprintAudit.type
                         if (!!footprintAudit.original_type) rec.footprint.original_type = footprintAudit.original_type
-                        rec.programs = footprintAudit.programs
-                        rec.certs = footprintAudit.certs
+                        if (!!footprintAudit.programs) rec.programs = footprintAudit.programs
+                        if (!!footprintAudit.certs) rec.certs = footprintAudit.certs
                         rec.status = footprintAudit.status
                     }
 
@@ -879,13 +882,16 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         FROM gsi2_config_question_weights
                         WHERE config_id IN (0,${configId})
                         LIMIT 1)`
-
-                  
+                            
                     // When no level has been completed yet or backfilling is enabled without terms accepted, run migration or backfilling
-                    if (obj.level === "NONE" || (/*!terms && */shall_backfill)) {
+                    if (obj.level === "NONE" ) { /*|| (-!terms- && shall_backfill)*/
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (!!rec.footprint) {
-                            if (true === rec.footprint.status && "green_stay_not_applicable" != rec.footprint.type) {
+                            /*if (["green_stay_blocked_anomaly"].indexOf(rec.footprint.type) > -1) {
+                                rec.type = rec.footprint.type.replace(/green_stay/, "gsi2")
+                                rec.status = rec.footprint.status
+                                return complete()
+                            } else*/ if (/*true === rec.footprint.status && */"green_stay_not_applicable" != rec.footprint.type) {
                                 query = `SELECT A.config_id, A.question_id, C.category, A.weight 
                                 FROM gsi2_config_question_weights A 
                                 LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id 
@@ -894,23 +900,26 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
                                 migrationMode = true
                                 obj.level = 'ADV_LEVEL'
+                                /*if ("green_stay_blocked_filter" == rec.footprint.type) {
+                                    rec.type = rec.footprint.type.replace(/green_stay/, "gsi2")
+                                    rec.status = rec.footprint.status
+                                }*/
                             } else { // Otherwise when no assessment/level was completed and footprint was not successful
-                                rec.type = `gsi2_not_available`
-                                rec.status = false
-                                return complete()
+                                return returnNotAvailable()
                             }
                         } else {
                             return returnNotAvailable()
                         }
                     }
+
                     
                     db.query(query, async (error, responses, fields) => {
-                        
                         if (responses.length > 0) {
                             let configScoreScale = await getConfigScoreScale(configId)
                             let achievePerCategory = {}
                             let points = 0
-                            let maxPoints = 0
+                            let maxPoints = configScoreScale.reduce((a, b) => (a.max > b.max) ? a : b).max
+                            let migrationMaxPoints = 0
                             responses.forEach(r => {
                                 if (r.weight > 0) {
                                     let map = {GSI_FPR_WATER_GRADE: 'waterClass', GSI_FPR_WASTE_GRADE: 'wasteClass', GSI_FPR_CARBON_GRADE: 'carbonClass', GSI_FPR_GREENSTAY_GRADE: 'greenClass'}
@@ -921,23 +930,22 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                     let score = parseFloat(r.response) * r.weight
                                     achievePerCategory[r.category].score += score
                                     points += score
-                                    maxPoints += r.weight
+                                    migrationMaxPoints += r.weight
                                 }
                             })
                             Object.keys(achievePerCategory).map((key, index) => {
                                 achievePerCategory[key] = achievePerCategory[key].score / achievePerCategory[key].total
                             })
                             
+                            points = Math.round(points) // Fix for floats to int comparison in next step
                             let grade = configScoreScale.find(x => points >= x.min && points <= x.max)
                             grade = !!grade ? grade.grade : null
 
                             // Override proportionally to max score for GSI1 migration period
                             if (migrationMode) {
-                                const maxScorePoints = configScoreScale.reduce((element,max) => element.max > max ? element.max : max).max
-                                let tweakPoints = points * (maxScorePoints/maxPoints)
-                                grade = configScoreScale.find(x => tweakPoints >= x.min && tweakPoints <= x.max).grade
+                                points = Math.round(points * (maxPoints/migrationMaxPoints))
+                                grade = configScoreScale.find(x => points >= x.min && points <= x.max).grade
                             }
-
 
                             outInner = {
                                 config_id: configId,
@@ -961,7 +969,6 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
                             if (!grade) {
                                 let msg = `Config with ID ${configId} has grading not fully configured for ${points} points of hotel ${hkey}.`
-                                console.log(msg)
                                 rec.msg = msg
                                 rec.type = 'gsi2_error'
                                 rec.status = false
@@ -969,14 +976,15 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                             } 
 
                             //console.log(query, outInner, rec)
-                            if (rec.footprint) {
-                                rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[0-9]+/, '').replace('_hero', '')
-                                if (!terms && migrationMode && rec.footprint.original_type != 'green_stay_not_available') rec.type += '_migpend'
+                            if (rec.footprint && rec.footprint.type !== "green_stay_not_applicable") {
+                                rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[0-9]+/, '')
+                                if (!terms && migrationMode) rec.type += '_migpend'
                             } else {
                                 rec.type = 'gsi2_self_inspection'
                             }
-                            if (!/backfill/.test(rec.type) && grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
-                            rec.status = true
+                            if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
+                            rec.status = !/blocked|not_available/.test(rec.type)
+                            if (!rec.status || /backfill/.test(rec.type)) rec.type = rec.type.replace('_hero', '')
                         } else {
                             return returnNotAvailable()
                         }
@@ -985,7 +993,6 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                     })
                 } catch (e) {
                     let msg = `Error processing GSI2 evaluation for hkey ${hkey} and config ID ${configId}: ${e}`
-                    console.log(msg)
                     return returnError(msg)
                 }
             }))        
