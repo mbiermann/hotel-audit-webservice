@@ -977,7 +977,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
                             //console.log(query, outInner, rec)
                             if (rec.footprint && rec.footprint.type !== "green_stay_not_applicable") {
-                                rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[0-9]+/, '')
+                                rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[0-9]+/, '').replace('_hero', '')
                                 if (!terms && migrationMode) rec.type += '_migpend'
                             } else {
                                 rec.type = 'gsi2_self_inspection'
