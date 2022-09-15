@@ -15,7 +15,6 @@ module.exports = {
     createReport: (type) => {
        return new Promise((resolve1, reject1) => {
             const hsReportLocalFilePath = `${tmpDirPath}/${type}_out.csv`
-            const hsReportZipLocalFilePath = `${hsReportLocalFilePath}.zip`
             const incr = 1000
             let table = type === 'gsi2' ? 'gsi2_reports' : 'hotels'
             let countCols = type === 'gsi2' ? 'COUNT(DISTINCT hkey) as count' : 'COUNT(hkey) as count'
@@ -24,6 +23,7 @@ module.exports = {
             let headers = []
             const reportKey = uuidv4()
             let index = 0
+            let proms = []
             db.select(table, '', countCols).then(async res1 => {
                 const total = Number(res1[0].count)
                 for (let i = 0; i < total; i += incr) {
@@ -38,19 +38,22 @@ module.exports = {
                     }
                     logger.logEvent(logger.ReportRunStatusUpdate, {page: i, incr: incr, count_statuses: statuses.length})
                 }
-                
                 let writer = csvWriter({headers: headers})
                 let output = fs.createWriteStream(hsReportLocalFilePath)
                 output.on('close', function() {
-                    logger.logEvent(logger.ReportRunStatusUpdate, {stage: `start_zip_csv_${type}`})
+                    logger.logEvent(logger.ReportRunStatusUpdate, {stage: `start_zip_xlsx_${type}`})
+                    let newFilePath = hsReportLocalFilePath.replace("csv", "xlsx")
+                    const hsReportZipLocalFilePath = `${newFilePath.replace(".","_")}.zip`
+                    var workbook = XLSX.readFile(hsReportLocalFilePath, {type: "csv"});
+                    XLSX.writeFile(workbook, newFilePath);
                     var zip = new AdmZip();
-                    zip.addLocalFile(hsReportLocalFilePath)
+                    zip.addLocalFile(newFilePath)
                     zip.writeZip(hsReportZipLocalFilePath)
-                    logger.logEvent(logger.ReportRunStatusUpdate, {stage: `end_zip_csv_${type}`})
+                    logger.logEvent(logger.ReportRunStatusUpdate, {stage: `end_zip_xlsx_${type}`})
                     resolve1(hsReportZipLocalFilePath)
                 })
                 writer.pipe(output)
-                let proms = []
+                proms = []
                 for (let m = 0; m < index; m++) {
                     proms.push(new Promise((resolve, reject) => {
                         cache.get(`${reportKey}:${m}`, (err, val) => {

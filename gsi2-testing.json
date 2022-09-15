@@ -148,7 +148,7 @@
         },
         "ADVANCED-1": {
             "config_id": "0",
-            "assessment_level": "ADVANCED_LEVEL",
+            "assessment_level": "ADV_LEVEL",
             "scoring": {
                 "score": 2,
                 "categories": {
@@ -180,7 +180,7 @@
         },
         "ADVANCED-2": {
             "config_id": "0",
-            "assessment_level": "ADVANCED_LEVEL",
+            "assessment_level": "ADV_LEVEL",
             "scoring": {
                 "score": 6,
                 "categories": {
@@ -225,7 +225,7 @@
         },
         "ADVANCED-3": {
             "config_id": "0",
-            "assessment_level": "ADVANCED_LEVEL",
+            "assessment_level": "ADV_LEVEL",
             "scoring": {
                 "score": 8,
                 "categories": {
