@@ -295,12 +295,12 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
 
 router.get('/green/reports/all', combinedAuthMiddleware, async (req, resp) => {
     resp.setHeader('Content-Disposition', 'attachment;filename=green-report.zip')
-    storage.readFileStream('green_out.xlsx.zip').pipe(resp)
+    storage.readFileStream('green_out_xlsx.zip').pipe(resp)
 })
 
 router.get('/gsi2/reports/all', combinedAuthMiddleware, async (req, resp) => {
     resp.setHeader('Content-Disposition', 'attachment;filename=gsi2-report.zip')
-    storage.readFileStream('gsi2_out.xlsx.zip').pipe(resp)
+    storage.readFileStream('gsi2_out_xlsx.zip').pipe(resp)
 })
 
 router.get('/green/reports/SoC', combinedAuthMiddleware, async (req, resp) => {

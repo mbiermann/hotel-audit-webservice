@@ -734,22 +734,22 @@ exports.getHkeysForCustomer = (ref) => {
     })
 }
 
-const getTermsStatusForHkey = (hkey, version) => {
+const getTermsStatusForHkey = (hkey) => {
     return new Promise((resolve) => {
-        const cacheKey = `green_terms:${hkey}:${version}`
+        const cacheKey = `green_terms:${hkey}`
         cache.get(cacheKey, (err, val) => {
             if (!!val) return resolve(parseInt(val))
-            let q = `SELECT COUNT(A.hkey) > 0 AS available
-            FROM hotels A
-            LEFT JOIN green_terms B ON A.hkey = B.hkey
-            LEFT JOIN green_terms_group C ON A.chain_id = C.id
-            WHERE A.hkey = ${hkey}
-            AND (B.version = ${version} OR C.version = ${version})
-            LIMIT 1`
+            let q = `SELECT GREATEST(
+                COALESCE((
+                    SELECT \`version\` FROM green_terms WHERE hkey = ${hkey} LIMIT 1
+                ),0), COALESCE((
+                    SELECT A.\`version\` FROM green_terms_group A LEFT JOIN hotels B ON A.id = B.chain_id WHERE B.hkey = ${hkey} LIMIT 1
+                ),0)
+            ) AS \`version\``
             db.query(q, async (err, res, flds) => {
-                let termsAccepted = res[0].available
-                cache.set(cacheKey, `${termsAccepted}`, 'EX', process.env.REDIS_TTL)
-                resolve(termsAccepted)
+                let version = res[0].version
+                cache.set(cacheKey, `${version}`, 'EX', process.env.REDIS_TTL)
+                resolve(version)
             })
         })
     })
@@ -787,7 +787,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                 let q = `SELECT A.\`_id\` AS \`level\` FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 1) GROUP BY A._id`
                 db.query(q, 
                     async (err2, res2, flds2) => {                        
-                        if (res2.length === 0) return resolve({level: "NONE"})
+                        if (res2.length === 0) return resolve({level: "PENDING"})
                         return resolve({level: res2[0].level})
                     })
             })
@@ -836,13 +836,14 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                 }
 
                 try {
-                    let terms = await getTermsStatusForHkey(hkey, 2)
+                    let terms = await getTermsStatusForHkey(hkey)
+                    let migrationMode = (terms === 1)
                     
                     // When there are no terms accepted and no backfilling requested, handle as not participating
                     //if (!terms && !shall_backfill) return returnNotAvailable()
 
                     let rec = {}
-                    let obj = terms ? await getHotelLeastLevelCompletedForHkey(hkey) : {level: 'NONE'}
+                    let obj = terms ? await getHotelLeastLevelCompletedForHkey(hkey) : {level: 'PENDING'}
 
                     let footprintAudit = footprintAudits[hkey]
 
@@ -853,7 +854,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                             rec.footprint[x] = footprintAudit[x]
                         })
                         if (!!footprintAudit.anomalies) rec.footprint.anomalies = footprintAudit.anomalies
-                        rec.footprint.partial_backfills = footprintAudit.partial_backfills
+                        rec.footprint.backfills = footprintAudit.backfills
                         rec.footprint.status = footprintAudit.status
                         rec.footprint.type = footprintAudit.type
                         if (!!footprintAudit.original_type) rec.footprint.original_type = footprintAudit.original_type
@@ -862,7 +863,6 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         rec.status = footprintAudit.status
                     }
 
-                    let migrationMode = false
                     let outInner = {}
                     let complete = () => {
                         // Pack response
@@ -884,7 +884,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         LIMIT 1)`
                             
                     // When no level has been completed yet or backfilling is enabled without terms accepted, run migration or backfilling
-                    if (obj.level === "NONE" ) { /*|| (-!terms- && shall_backfill)*/
+                    if (obj.level === "PENDING" ) { /*|| (-!terms- && shall_backfill)*/
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (!!rec.footprint) {
                             /*if (["green_stay_blocked_anomaly"].indexOf(rec.footprint.type) > -1) {
@@ -898,8 +898,8 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 LEFT JOIN gsi2_questions C ON B.question_id = C._id WHERE A.config_id = (
                                     SELECT MAX(config_id) AS config_id FROM gsi2_config_question_weights WHERE config_id IN (0,${configId}) LIMIT 1
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
-                                migrationMode = true
-                                obj.level = 'ADV_LEVEL'
+                                // When this is not a full backfill, then push to Advanced
+                                if (!/green_stay_backfill/.test(rec.footprint.type)) obj.level = 'ADV_LEVEL'
                                 /*if ("green_stay_blocked_filter" == rec.footprint.type) {
                                     rec.type = rec.footprint.type.replace(/green_stay/, "gsi2")
                                     rec.status = rec.footprint.status
@@ -941,8 +941,9 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                             let grade = configScoreScale.find(x => points >= x.min && points <= x.max)
                             grade = !!grade ? grade.grade : null
 
-                            // Override proportionally to max score for GSI1 migration period
-                            if (migrationMode) {
+                            /* 2022-09-19 Decision to remove migration inflation benefit due to too high proportion of high scores
+                            */// Override proportionally to max score for GSI1 migration period
+                            if (migrationMode && obj.level != "PENDING") {
                                 points = Math.round(points * (maxPoints/migrationMaxPoints))
                                 grade = configScoreScale.find(x => points >= x.min && points <= x.max).grade
                             }
@@ -978,13 +979,13 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                             //console.log(query, outInner, rec)
                             if (rec.footprint && rec.footprint.type !== "green_stay_not_applicable") {
                                 rec.type = rec.footprint.type.replace('green_stay', 'gsi2').replace(/\_mode_[0-9]+/, '').replace('_hero', '')
-                                if (!terms && migrationMode) rec.type += '_migpend'
+                                if (migrationMode) rec.type += '_migpend'
                             } else {
                                 rec.type = 'gsi2_self_inspection'
                             }
                             if (grade >= configScoreScale.find(x => x.is_cliff === 'TRUE').grade) rec.type += '_hero'
                             rec.status = !/blocked|not_available/.test(rec.type)
-                            if (!rec.status || /backfill/.test(rec.type)) rec.type = rec.type.replace('_hero', '')
+                            if (!rec.status || (/backfill/.test(rec.type) && !/partial_backfill/.test(rec.type))) rec.type = rec.type.replace('_hero', '')
                         } else {
                             return returnNotAvailable()
                         }
@@ -1082,33 +1083,38 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                             let backfillProms = []
                             for (let i = 0; i < res.length; i++) {
                                 let e = res[i]
+                                let isFullBackfill = (shall_backfill && (!/green_stay_self_inspection/.test(e.type)/* || !hasTermsAccepted*/))
                                 let isMissingWasteData = (e.kilogramWastePOC == -1)
                                 let isMissingWaterData = (e.literWaterPOC == -1)
-                                let hasTermsAccepted = await getTermsStatusForHkey(e.hkey, null)
-                                if ((shall_backfill && (!/green_stay_self_inspection/.test(e.type)/* || !hasTermsAccepted*/)) || (shall_backfill && (isMissingWasteData || isMissingWaterData))) {
+                                let isPartialBackfill = !isFullBackfill && (shall_backfill && (isMissingWasteData || isMissingWaterData))
+                                if (isFullBackfill || isPartialBackfill) {
                                     backfillProms.push(new Promise((resolve5, reject5) => {
                                         db.query(`SELECT * FROM green_hotels_backfill WHERE hkey = ${e.hkey}`, async (error, backfill, fields) => {
                                             if (backfill.length > 0) {
                                                 let obj = await evalGreenBackfillRecord(backfill[0])
                                                 obj.original_type = e.type
-                                                let partialBackfills = []
-                                                if (isMissingWasteData) {
-                                                    e.kilogramWastePOC = obj.kilogramWastePOC
-                                                    e.wasteClass = obj.wasteClass
-                                                    partialBackfills.push('WASTE_FOOTPRINT')
+                                                let backfills = []
+                                                if (isPartialBackfill) {
+                                                    if (isMissingWasteData) {
+                                                        e.kilogramWastePOC = obj.kilogramWastePOC
+                                                        e.wasteClass = obj.wasteClass
+                                                        backfills.push('WASTE_FOOTPRINT')
+                                                    }
+                                                    if (isMissingWaterData) {
+                                                        e.literWaterPOC = obj.literWaterPOC
+                                                        e.waterClass = obj.waterClass
+                                                        backfills.push('WATER_FOOTPRINT')
+                                                    }
                                                 }
-                                                if (isMissingWaterData) {
-                                                    e.literWaterPOC = obj.literWaterPOC
-                                                    e.waterClass = obj.waterClass
-                                                    partialBackfills.push('WATER_FOOTPRINT')
-                                                }
-                                                if (partialBackfills.length > 0) {
-                                                    e.partial_backfills = partialBackfills
+                                                if (isFullBackfill) {
+                                                    backfills.push(...['CARBON_FOOTPRINT','WATER_FOOTPRINT','WASTE_FOOTPRINT'])
+                                                    obj.backfills = backfills
+                                                    records[e.hkey] = obj
+                                                } else {
+                                                    e.backfills = backfills
                                                     e.original_type = e.type
                                                     e.type = obj.type.replace('backfill', 'partial_backfill')                                                    
                                                     records[e.hkey] = e
-                                                } else {
-                                                    records[e.hkey] = obj
                                                 }
                                             }
                                             resolve5()

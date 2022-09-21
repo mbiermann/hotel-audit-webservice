@@ -40,7 +40,7 @@ router.get('/green-report', combinedAuthMiddleware, async (_, resp) => {
 
 router.get('/hs-report', combinedAuthMiddleware, (_, res) => {
     res.setHeader('Content-Disposition', 'attachment;filename=clean-report.zip')
-    storage.readFileStream('clean_out.xlsx.zip').pipe(res)
+    storage.readFileStream('clean_out_xlsx.zip').pipe(res)
 })
 
 module.exports = router;
