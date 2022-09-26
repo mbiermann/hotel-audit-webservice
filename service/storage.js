@@ -1398,6 +1398,7 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
                 let data = {}
                 Object.assign(data, res[hkey])
                 for (let x of ["hkey", "_id", "_createdDate", "_updatedDate", "_owner"]) delete data[x]
+                if (!greenTrackings[hkey]) greenTrackings[hkey] = {} 
                 Object.assign(greenTrackings[hkey], data)
             }
         })
