@@ -85,6 +85,19 @@ const getGreenTrackingForHkeysFromDB = (hkeys) => {
     return db.select("green_tracking", filter)
 }
 
+const getTrackingForHkeysFromDB = async (hkeys) => {
+    let data = {}
+    const list = hkeys.map(val => db.escape(val)).join(', ')
+    let filter = `WHERE hkey IN (${list})`
+    let events = await db.select("tracking", filter)
+    for (let i = 0; i < events.length; i++) {
+        let e = events[i]
+        if (!data[e.hkey]) data[e.hkey] = {}
+        data[e.hkey][e.event] = e.value
+    }
+    return data
+}
+
 let evalAuditRecord = (i) => {
     return new Promise(async (resolve, reject) => {
         i.status = false
@@ -541,6 +554,10 @@ const cacheGreenTrackingForHkey = (hkey, elem) => {
     cache.set(`green_tracking:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
 }
 
+const cacheTrackingForHkey = (hkey, elem) => {
+    cache.set(`tracking:${hkey}`, JSON.stringify(elem), 'EX', process.env.REDIS_TTL);
+}
+
 const getCachedGSI2AuditRecordForHkeyAndConfigId = (hkey, configId, filter) => {
     return new Promise((resolve, reject) => {
         cache.get(`gsi2:${configId}:${hkey}:${filter}`, (err, val) => {
@@ -594,6 +611,24 @@ const getCachedGreenTrackingForHkeys = (hkeys) => {
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve1) => {
                 cache.get(`green_tracking:${hkey}`, (err, val) => {
+                    if (!!val) data[hkey] = JSON.parse(val)
+                    resolve1()
+                })
+            }))
+        }
+        Promise.all(proms).then(() => {
+            resolve(data)
+        })
+    })   
+}
+
+const getCachedTrackingForHkeys = (hkeys) => {
+    return new Promise((resolve, reject) => {
+        let data = {}
+        let proms = []
+        for (let hkey of hkeys) {
+            proms.push(new Promise((resolve1) => {
+                cache.get(`tracking:${hkey}`, (err, val) => {
                     if (!!val) data[hkey] = JSON.parse(val)
                     resolve1()
                 })
@@ -671,6 +706,38 @@ const getGreenTrackingForHkeys = (hkeys, bypass_cache = false) => {
 }
 
 exports.getGreenTrackingForHkeys = getGreenTrackingForHkeys
+
+
+const getTrackingForHkeys = (hkeys, bypass_cache = false) => {
+    return new Promise(async (resolve, reject) => {
+        try {
+            let res = {}
+            hkeys = hkeys.filter((val) => !isNaN(Number(val))).map((val) => Number(val))
+            if (hkeys.length === 0) return resolve([])
+            if (!bypass_cache) {
+                res = await getCachedTrackingForHkeys(hkeys)
+                for (let hkey of Object.keys(res)) {
+                    hkeys.splice(hkeys.indexOf(Number(hkey)), 1)
+                }
+                if (hkeys.length === 0) return resolve(res)
+            }
+            let items = await getTrackingForHkeysFromDB(hkeys)
+            let proms = []
+            for (let hkey of Object.keys(items)) {
+                proms.push(new Promise(async (rslv, rjt) => {
+                    if (!bypass_cache) cacheTrackingForHkey(hkey, items[hkey])
+                    res[hkey] = items[hkey]
+                    hkeys.splice(hkeys.indexOf(Number(hkey)), 1)
+                    rslv()
+                }))
+            }
+            await Promise.all(proms)
+            resolve(res)
+        } catch (err) {
+            reject(err)
+        }
+    })
+}
 
 exports.getTouchlessStatusForHkeys = (hkeys) => {
     return new Promise(async (resolve, reject) => {
@@ -1330,11 +1397,19 @@ exports.getHotelStatusByHkeys = async (hkeys, programs, flat = false, bypass_cac
             for (let hkey of Object.keys(res)) {
                 let data = {}
                 Object.assign(data, res[hkey])
-                for (let x of ["hkey", "_id", "_createdDate", "_updatedDate"]) delete data[x]
-                greenTrackings[hkey] = data
+                for (let x of ["hkey", "_id", "_createdDate", "_updatedDate", "_owner"]) delete data[x]
+                Object.assign(greenTrackings[hkey], data)
             }
         })
-        proms.push(greenTrackingFetch)       
+        proms.push(greenTrackingFetch)     
+        
+        let trackingFetch = getTrackingForHkeys(hkeys, bypass_cache).then(res => {
+            for (let hkey of Object.keys(res)) {
+                if (!greenTrackings[hkey]) greenTrackings[hkey] = {}
+                Object.assign(greenTrackings[hkey], res[hkey])
+            }
+        })
+        proms.push(trackingFetch)  
     
         let greenAuditRecordsFetch = this.getGreenAuditRecordsForHkeys(hkeys, {backfill: backfill}).then((res) => {
             for (let hkey of Object.keys(res)) {
