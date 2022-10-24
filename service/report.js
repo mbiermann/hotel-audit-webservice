@@ -45,7 +45,11 @@ module.exports = {
                                     let obj = JSON.parse(val)
                                     let outLine = {}
                                     headers.forEach(col => {
-                                        outLine[col] = (obj[col] ? obj[col] : null)
+                                        let val = obj[col]
+                                        if (typeof val === 'boolean') {
+                                            val = val ? 'TRUE' : 'FALSE'
+                                        }
+                                        outLine[col] = val
                                     })
                                     worksheet.addRow(outLine).commit()
                                 }

@@ -3,7 +3,9 @@ const jwt = require('jsonwebtoken')
 let validate = (req) => {
     return new Promise((resolve, reject) => {
         if (req.auth) {
-            resolve()
+            //if ((req.auth.grants === 'general_access') || req.originalUrl.match(new RegExp(req.auth.grants))) return resolve()
+            //reject(new Error(`Path not allowed for client ID ${req.auth.client_id}`))        
+            return resolve()
         } else {
             reject('No token provided.')
         }

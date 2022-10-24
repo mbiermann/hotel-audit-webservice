@@ -851,7 +851,15 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
         const getHotelLeastLevelCompletedForHkey = (hkey) => {
             return new Promise((resolve, reject) => {
-                let q = `SELECT A.\`_id\` AS \`level\` FROM gsi2_levels A RIGHT JOIN gsi2_level_assessments B ON A._id = B.\`level\` WHERE B.required = 1 AND A._id = (SELECT _id FROM gsi2_levels WHERE _id NOT IN (SELECT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (SELECT C.assessment FROM gsi2_level_assessments C LEFT JOIN gsi2_reports D ON C.assessment = D.assessment WHERE C.required = 1 AND D.hkey = ${hkey})) ORDER BY \`rank\` desc limit 1) GROUP BY A._id`
+                let q = `
+                    SELECT _id as \`level\` FROM gsi2_levels WHERE _id NOT IN (
+                        SELECT DISTINCT \`level\` FROM gsi2_level_assessments WHERE required = 1 AND assessment NOT IN (
+                            SELECT C.assessment FROM gsi2_level_assessments C 
+                            LEFT JOIN gsi2_reports D ON C.assessment = D.assessment 
+                            WHERE C.required = 1 AND D.hkey = ${hkey}
+                        )
+                    ) ORDER BY \`rank\` desc limit 1`
+                
                 db.query(q, 
                     async (err2, res2, flds2) => {                        
                         if (res2.length === 0) return resolve({level: "PENDING"})
@@ -938,17 +946,14 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         resolve2(out)    
                     }
 
-                    let query = `SELECT B.question_id, D.category, C.weight, IF(E.response IS NULL, 0, E.response) AS response, C.config_id
-                        FROM gsi2_level_assessments A
-                        LEFT JOIN gsi2_assessment_questions B ON A.assessment = B.assessment_id
-                        LEFT JOIN gsi2_config_question_weights C ON B.question_id = C.question_id
-                        LEFT JOIN gsi2_questions D ON C.question_id = D._id
-                        LEFT JOIN (SELECT * FROM gsi2_responses_full_view WHERE hkey = ${hkey}) E ON C.question_id = E.question_id
-                        WHERE A.\`level\` = '${obj.level}' AND C.weight IS NOT NULL AND C.config_id = (
-                        SELECT MAX(config_id) AS config_id
-                        FROM gsi2_config_question_weights
-                        WHERE config_id IN (0,${configId})
-                        LIMIT 1)`
+                    let query = `SELECT B.question_id, E.category, D.weight, B.response, D.config_id FROM (SELECT * FROM gsi2_reports WHERE hkey = ${hkey}) A
+                        LEFT JOIN gsi2_responses B ON A._id = B.report_id
+                        LEFT JOIN gsi2_level_assessments C ON A.assessment = C.assessment
+                        LEFT JOIN gsi2_config_question_weights D ON B.question_id = D.question_id
+                        LEFT JOIN gsi2_questions E ON E._id = B.question_id
+                        WHERE C.\`level\` = '${obj.level}' AND D.config_id = (
+                            SELECT MAX(config_id) AS config_id FROM gsi2_config_question_weights WHERE config_id IN (0,${configId}) LIMIT 1
+                        )`
                             
                     // When no level has been completed yet or backfilling is enabled without terms accepted, run migration or backfilling
                     if (obj.level === "PENDING" ) { /*|| (-!terms- && shall_backfill)*/
@@ -1010,10 +1015,10 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
 
                             /* 2022-09-19 Decision to remove migration inflation benefit due to too high proportion of high scores
                             */// Override proportionally to max score for GSI1 migration period
-                            if (migrationMode && obj.level != "PENDING") {
+                            /*if (migrationMode && obj.level != "PENDING") {
                                 points = Math.round(points * (maxPoints/migrationMaxPoints))
                                 grade = configScoreScale.find(x => points >= x.min && points <= x.max).grade
-                            }
+                            }*/
 
                             outInner = {
                                 config_id: configId,
@@ -1122,6 +1127,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                     LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey
                     LEFT JOIN hotels E ON D.hkey = E.hkey
                     WHERE C.report_year = D.report_year`
+                    
                     await db.query(query, async (error, greenClaims, fields) => {
                         let evals = []
                         greenClaims.forEach(item => {
@@ -1199,7 +1205,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                         }
 
                         if (leftHkeys.length > 0) {
-                            await db.query(`SELECT C.* FROM (
+                            let q = `SELECT C.* FROM (
                                 SELECT DISTINCT(A.hkey), (
                                     SELECT MAX(B.report_year) FROM green_audits B WHERE B.hkey = A.hkey LIMIT 1
                                 ) AS report_year 
@@ -1207,7 +1213,9 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                                 WHERE A.hkey IN (${leftHkeys})
                             ) D 
                             LEFT JOIN green_audits C ON C.hkey = D.hkey 
-                            WHERE C.report_year = D.report_year`, async (error2, greenAudits, fields2) => {
+                            WHERE C.report_year = D.report_year`
+                            
+                            await db.query(q, async (error2, greenAudits, fields2) => {
                                 greenAudits.forEach(item => {
                                     evals.push(evalGreenAuditRecord(item, !!options.full_certs_and_programs))
                                     leftHkeys = leftHkeys.filter(x => x != item.hkey)
