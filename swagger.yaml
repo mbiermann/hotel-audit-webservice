@@ -1028,7 +1028,7 @@ definitions:
         properties:
           report_year:
             type: "number"
-            enum: [2019,2021]
+            enum: [2019,2021,2022]
           kilogramCarbonPOC:
             type: "number"
           literWaterPOC:

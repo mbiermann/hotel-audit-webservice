@@ -147,7 +147,7 @@ exports.getInvitations = (offset, size) => {
 let getGreenhouseGasFactors = (i) => {
 
     return new Promise((resolve, reject) => {
-        let report_year = ([2019,2021].indexOf(i.report_year) > -1 ? i.report_year : 2021)
+        let report_year = ([2019,2021,2022].indexOf(i.report_year) > -1 ? i.report_year : 2022)
         const cache_key = `ghg_factors_${report_year}`
         cache.get(cache_key, (err, val) => { 
             if (!!val) {
@@ -494,7 +494,7 @@ let evalGreenExceptionRecord = (i) => {
         if (cert) rec.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
         rec.type = "green_stay_not_applicable"
         // Only pass exceptions when older than begin of latest report year
-        let latestReportYear = 2021
+        let latestReportYear = 2022
         rec.status = (i.opening_date >= new Date(latestReportYear, 0))
         resolve(rec)
     })
@@ -1506,7 +1506,7 @@ exports.getGreenExceptionsReport = (where, offset, size) => {
         db.query(`SELECT * FROM green_exceptions ${where} ORDER BY _id ASC LIMIT ${offset}, ${size}`, [], (fst) => {
             db.query(`SELECT COUNT(*) as 'count' FROM green_exceptions ${where}`, [], (snd) => {
                 let proms = []
-                let latestReportYear = 2021
+                let latestReportYear = 2022
                 for (let item of fst) {
                     if (item.opening_date < new Date(latestReportYear+1, 0)) {
                         proms.push(evalGreenExceptionRecord(item))
