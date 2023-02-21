@@ -1,6 +1,6 @@
-swagger: "2.0"
+openapi: 3.0.0
 info:
-  version: "2.0.1"
+  version: "2.0.3"
   title: "Hotel Audit System API"
   description: "Please consider that resources with a lock require a valid secretKey query parameter on the /v1 path (\"v1_auth\") and a valid JWT access token (\"v2_auth_query\" or \"v2_auth_header\") on the /v2 path."
   contact:
@@ -907,6 +907,86 @@ paths:
           description: "Forbidden"
         "500":
           description: "Server error"
+  /v2/webhooks:
+    get:
+      tags:
+      - "v2"
+      summary: "Webhooks List"
+      description: "Retrieve webhooks configured for current client ID"
+      operationId: "getWebhooks"
+      produces:
+      - "application/json"
+      responses:
+        "200":
+          description: "Successful operation"
+          content:
+            application/json:
+              schema: 
+                "$ref": "#/definitions/GetWebhooksResponse"
+          examples:
+            application/json: [{"id": "5fd67123-8b6f-47e3-815f-cd152644aa5c","url": "https://webhook.site/a73997da-241e-4773-8374-dc6029cc8ff7"}]
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+    post:
+      tags:
+      - "v2"
+      summary: "Add Webhook"
+      description: "Add webhook under current client ID"
+      operationId: "addWebhook"
+      produces:
+      - "application/json"
+      responses:
+        "200":
+          description: "Successful operation"
+          content:
+            application/json:
+              schema: 
+                "$ref": "#/definitions/AddWebhookResponse"
+          examples:
+            application/json: {"id": "5fd67123-8b6f-47e3-815f-cd152644aa5c"}
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
+  /v2/webhooks/{id}:
+    delete:
+      tags:
+      - "v2"
+      summary: "Delete Webhook"
+      description: "Delete webhook under current client ID"
+      operationId: "deleteWebhook"
+      produces:
+      - "application/json"
+      parameters:
+        - id:
+          in: "path" 
+          type: "string"
+          description: "Unique ID of record to remove in UUID format."
+          required: true
+      responses:
+        "200":
+          description: "Successful operation"
+          content:
+            application/json:
+              schema: 
+                "$ref": "#/definitions/DeleteWebhookResponse"
+          examples:
+            application/json: {"id": "5fd67123-8b6f-47e3-815f-cd152644aa5c"}
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
 securityDefinitions:
   v1_auth:
     type: "apiKey"
@@ -972,7 +1052,29 @@ definitions:
       token:
         type: "string"
         description: "Access token (JWT)"
-  
+  DeleteWebhookResponse:
+    type: "object"
+    properties:
+      id:
+        type: "string"
+        description: "Unique identifier of the webhook record removed in UUID format."
+  AddWebhookResponse:
+    type: "object"
+    properties:
+      id:
+        type: "string"
+        description: "Unique identifier of the webhook record on file in UUID format."
+  GetWebhooksResponse:
+    type: "array"
+    items:
+      type: "object"
+      properties:
+        id:
+          type: "string"
+          description: "Unique identifier of the webhook record on file in UUID format."
+        url:
+          type: "string"
+          description: "Webhook post-back URL to receive POST requests with information on the hotel that there are updates available for."
   GSI2AuditResponse:
     type: "object"
     properties:

@@ -35,7 +35,7 @@ const _validateRateLimitAccess = (req, clientID, settings) => {
 
 let validate = (req) => {
     return new Promise((resolve, reject) => {
-        const clientID = req.body.client_id || req.query.client_id || req.headers['x-client-id']
+        const clientID = req.body.client_id || req.query.client_id || req.headers['x-client-id'] || req.auth.client_id
         //console.log("Client ID", clientID)
         if (clientID) {
             //console.log("Get settings from storage", clientID)

@@ -7,6 +7,7 @@ const logger = require('../utils/logger')
 const safeStringify = require('json-stable-stringify')
 const SHA256 = require("crypto-js/sha256")
 const {GreenStayAuditRecord} = require('../model/green')
+const uuid = require('uuid')
 
 const classes = ['A','B','C','D']
 
@@ -1765,3 +1766,33 @@ let getHotelsWithGSI2Report = () => {
     })
 }
 exports.getHotelsWithGSI2Report = getHotelsWithGSI2Report
+
+let getWebhooksForClientID = (client_id) => {
+    return new Promise((resolve, reject) => {
+        return db.query(`SELECT _id as id, url FROM webhooks WHERE client_id = '${client_id}'`, [], (res) => {
+            resolve(res)
+        })
+    })
+}
+exports.getWebhooksForClientID = getWebhooksForClientID
+
+let saveWebhookForClientID = (client_id, url) => {
+    return new Promise((resolve, reject) => {
+        const id = uuid.v4()
+        return db.query(`INSERT INTO webhooks (_id, client_id, url) VALUES ('${id}', '${client_id}', '${url}')`, [], (res) => {
+            resolve(id)
+        })
+    })
+}
+exports.saveWebhookForClientID = saveWebhookForClientID
+
+let deleteWebhookForClientID = (client_id, id) => {
+    return new Promise((resolve, reject) => {
+        return db.query(`DELETE FROM webhooks WHERE client_id = '${client_id}' AND _id = '${id}'`, [], (res) => {
+            console.log(res.affectedRows)
+            if (res.affectedRows === 0) reject(`No entry with ID ${id} for client ID ${client_id}`)
+            resolve(id)
+        })
+    })
+}
+exports.deleteWebhookForClientID = deleteWebhookForClientID
