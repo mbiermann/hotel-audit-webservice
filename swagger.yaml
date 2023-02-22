@@ -940,6 +940,17 @@ paths:
       operationId: "addWebhook"
       produces:
       - "application/json"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                url:
+                  description: The URL the system should send post-back events on record changes to.
+                  example: "http://webhook.site"
+                  required: true
       responses:
         "200":
           description: "Successful operation"
