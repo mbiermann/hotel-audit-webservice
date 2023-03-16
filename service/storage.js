@@ -1502,6 +1502,17 @@ exports.getGreenAuditsReport = (where, offset, size, backfill_mode) => {
     })
 }
 
+exports.getGSI2AuditsReport = (where, offset, size, backfill_mode) => {
+    return new Promise(async (resolve, reject) => {
+        let table = backfill_mode ? "green_all_updates_backfilled" : "gsi2_all"
+        db.query(`SELECT DISTINCT(hkey) FROM ${table} ${where} ORDER BY hkey ASC LIMIT ${offset}, ${size}`, [], (fst) => {
+            db.query(`SELECT COUNT(DISTINCT(hkey)) as 'count' FROM ${table} ${where}`, [], (snd) => {
+                getGSI2AuditRecordsForHkeysAndConfigKey(fst.map(x => x.hkey), 0, {backfill: backfill_mode}).then(res => resolve({result: res, total: snd[0]['count']}))
+            })
+        })
+    })
+}
+
 exports.getGreenExceptionsReport = (where, offset, size) => {
     return new Promise(async (resolve, reject) => {
         db.query(`SELECT * FROM green_exceptions ${where} ORDER BY _id ASC LIMIT ${offset}, ${size}`, [], (fst) => {

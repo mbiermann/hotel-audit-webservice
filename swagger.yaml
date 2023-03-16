@@ -630,6 +630,51 @@ paths:
       security:
       - v2_auth_query: []
       - v2_auth_header: []
+  /v2/audits/report/gsi2:
+    get:
+      tags:
+      - "v2"
+      summary: "Pagination on Green Stay V2 audits"
+      description: "Paginated listing of Green Stay V2 audit reports"
+      operationId: "getGreenStayV2AuditReportsV2"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "page"
+        in: "query"
+        description: "Number of page"
+        required: true
+        type: "integer"
+        minimum: 1
+        default: 1
+      - name: "size"
+        in: "query"
+        description: "Number of results per page"
+        required: true
+        type: "integer"
+        minimum: 1
+        maximum: 500
+      - name: "since"
+        in: "query"
+        description: "Filter on updated date field of audit reports in format YYYY-MM-DD"
+        type: "string"
+      - name: "backfill"
+        in: "query"
+        description: "***For internal and educational purposes only - should not be used in public production environments.***\nOptional flag to provide calculated Green Stay record based on similar hotels, if no actual record exists for the hotel."
+        required: false
+        type: "boolean"
+      responses:
+        "200":
+          description: "Successful operation"
+        "401":
+          description: "Unauthorized access"
+        "403":
+          description: "Forbidden"
+        "500":
+          description: "Server error"
+      security:
+      - v2_auth_query: []
+      - v2_auth_header: []
   /v2/audits/report/green_tracking:
     get:
       tags:
