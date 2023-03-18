@@ -17,7 +17,7 @@ module.exports = {
     createReport: (type) => {
        return new Promise((resolve1, reject1) => {
             const incr = 1000
-            let table = type === 'gsi2' ? 'gsi2_reports' : 'hotels'
+            let table = type === 'gsi2' ? 'gsi2_all' : 'hotels'
             let countCols = type === 'gsi2' ? 'COUNT(DISTINCT hkey) as count' : 'COUNT(hkey) as count'
             let cols = type === 'gsi2' ? 'DISTINCT hkey' : 'hkey'
             let programs = {clean: (type === 'clean'), green: (type === 'green'), gsi2: (type === 'gsi2')}
