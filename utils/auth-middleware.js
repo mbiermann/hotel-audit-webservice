@@ -11,8 +11,10 @@ const any = require('promise.any')
 
 const combinedAuthMiddleware = (req, res, next) => {
     any([validateCitrixAccess(req), validateJWTAccess(req), validateRateLimitedAccess(req)]).then(() => attachClientIDMiddleware(req, res, () => {blocker.unblock(req, next)})).catch(err => {
-        trackEvent('Audit Web Service', 'Authentication error', "No authentication successful with errors", err.errors.map(x => `${x.name}: ${x.message}`))
-        logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 401, "error": "Authentication Error", trace: `No authentication successful with errors ${err.errors.map(x => `${x.name}: ${x.message}`)}` })
+        if ('errors' in err) {
+            trackEvent('Audit Web Service', 'Authentication error', "No authentication successful with errors", err.errors.map(x => `${x.name}: ${x.message}`))
+            logger.logEvent(logger.EventServiceResponse, { "url": req.originalUrl, "status": 401, "error": "Authentication Error", trace: `No authentication successful with errors ${err.errors.map(x => `${x.name}: ${x.message}`)}` })
+        }
         blocker.block(req, (timeout) => {
             res.status(401).json({
                 error: true,
