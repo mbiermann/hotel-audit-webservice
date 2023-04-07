@@ -809,9 +809,9 @@ const getTermsStatusForHkey = (hkey) => {
             if (!!val) return resolve(parseInt(val))
             let q = `SELECT GREATEST(
                 COALESCE((
-                    SELECT \`version\` FROM green_terms WHERE hkey = ${hkey} LIMIT 1
+                    SELECT MAX(\`version\`) FROM green_terms WHERE hkey = ${hkey} LIMIT 1
                 ),0), COALESCE((
-                    SELECT A.\`version\` FROM green_terms_group A LEFT JOIN hotels B ON A.id = B.chain_id WHERE B.hkey = ${hkey} LIMIT 1
+                    SELECT MAX(A.\`version\`) FROM green_terms_group A LEFT JOIN hotels B ON A.id = B.chain_id WHERE B.hkey = ${hkey} LIMIT 1
                 ),0)
             ) AS \`version\``
             db.query(q, async (err, res, flds) => {
