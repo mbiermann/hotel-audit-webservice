@@ -824,7 +824,7 @@ const getTermsStatusForHkey = (hkey) => {
 }
 
 let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
-    const cacheFilter = SHA256(safeStringify((({ bypass_cache, ...o }) => o)(options)))
+    const cacheFilter = SHA256(safeStringify((({ bypass_cache, ...o }) => o)(options))).toString()
     let shall_backfill = (options && options.backfill)
     let bypass_cache = (options && options.bypass_cache)
     return new Promise(async (resolve, reject) => {
