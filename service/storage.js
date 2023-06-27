@@ -802,11 +802,10 @@ exports.getHkeysForCustomer = (ref) => {
     })
 }
 
-const getTermsStatusForHkey = (hkey) => {
+const getTermsStatusForHkey = (hkey, options) => {
     return new Promise((resolve) => {
         const cacheKey = `green_terms:${hkey}`
-        cache.get(cacheKey, (err, val) => {
-            if (!!val) return resolve(parseInt(val))
+        let runQuery = () => {
             let q = `SELECT GREATEST(
                 COALESCE((
                     SELECT MAX(\`version\`) FROM green_terms WHERE hkey = ${hkey} LIMIT 1
@@ -819,7 +818,15 @@ const getTermsStatusForHkey = (hkey) => {
                 cache.set(cacheKey, `${version}`, 'EX', process.env.REDIS_TTL)
                 resolve(version)
             })
-        })
+        }
+        if (!!options.bypass_cache) {
+            runQuery()
+        } else {
+            cache.get(cacheKey, (err, val) => {
+                if (!!val) return resolve(parseInt(val))
+                runQuery()
+            })
+        }
     })
 }
 
@@ -912,14 +919,15 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                 }
 
                 try {
-                    let terms = await getTermsStatusForHkey(hkey)
-                    let migrationMode = (terms === 1)
+                    let terms = await getTermsStatusForHkey(hkey, options)
                     
                     // When there are no terms accepted and no backfilling requested, handle as not participating
                     //if (!terms && !shall_backfill) return returnNotAvailable()
 
                     let rec = {}
                     let obj = terms ? await getHotelLeastLevelCompletedForHkey(hkey) : {level: 'PENDING'}
+
+                    let migrationMode = (terms === 1) || (obj.level === 'PENDING')
 
                     let footprintAudit = footprintAudits[hkey]
 
@@ -957,14 +965,10 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                         )`
                             
                     // When no level has been completed yet or backfilling is enabled without terms accepted, run migration or backfilling
-                    if (obj.level === "PENDING" ) { /*|| (-!terms- && shall_backfill)*/
+                    if (obj.level === "PENDING" ) { 
                         // During migration grace period from GSI1 overwrite to Advanced level
                         if (!!rec.footprint) {
-                            /*if (["green_stay_blocked_anomaly"].indexOf(rec.footprint.type) > -1) {
-                                rec.type = rec.footprint.type.replace(/green_stay/, "gsi2")
-                                rec.status = rec.footprint.status
-                                return complete()
-                            } else*/ if (/*true === rec.footprint.status && */"green_stay_not_applicable" != rec.footprint.type) {
+                            if ("green_stay_not_applicable" != rec.footprint.type) {
                                 query = `SELECT A.config_id, A.question_id, C.category, A.weight 
                                 FROM gsi2_config_question_weights A 
                                 LEFT JOIN gsi2_assessment_questions B ON A.question_id = B.question_id 
@@ -973,10 +977,7 @@ let getGSI2AuditRecordsForHkeysAndConfigKey = (hkeys, configKey, options) => {
                                 )  AND B.assessment_id = 'HOTEL_FPR'`
                                 // When this is not a full backfill, then push to Advanced
                                 if (!/green_stay_backfill/.test(rec.footprint.type)) obj.level = 'ADV_LEVEL'
-                                /*if ("green_stay_blocked_filter" == rec.footprint.type) {
-                                    rec.type = rec.footprint.type.replace(/green_stay/, "gsi2")
-                                    rec.status = rec.footprint.status
-                                }*/
+                               
                             } else { // Otherwise when no assessment/level was completed and footprint was not successful
                                 return returnNotAvailable()
                             }
