@@ -31,10 +31,6 @@ class GreenStayAuditRecord {
             this.type = auditData.type
             this.status = auditData.status
         }
-        if (auditData.chain_id == 15 && this.greenClass != "A") {
-            this.type = "green_stay_blocked_filter"
-            this.status = false
-        }
         // GSI1
         if (auditData.program) this.program = select(['name', 'link'], auditData.program)
         if (auditData.cert) this.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], auditData.cert)
