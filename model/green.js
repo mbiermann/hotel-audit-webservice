@@ -31,6 +31,17 @@ class GreenStayAuditRecord {
             this.type = auditData.type
             this.status = auditData.status
         }
+
+        if (auditData.chain_id == 15 && !auditData.programs) {
+            this.kilogramCarbonPOC = -1
+            this.literWaterPOC = -1
+            this.kilogramWastePOC = -1
+            this.carbonClass = ""
+            this.waterClass = ""
+            this.wasteClass = ""
+            this.greenClass = ""
+        }
+
         // GSI1
         if (auditData.program) this.program = select(['name', 'link'], auditData.program)
         if (auditData.cert) this.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], auditData.cert)
