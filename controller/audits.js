@@ -264,6 +264,17 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                 if (hkey in _green) {
                     if (!(hkey in data)) data[hkey] = []
                     let record = _green[hkey]
+                    // Fix for Marriott in GSI1
+                    if (record.chain_id == 15) {
+                        record.kilogramCarbonPOC = -1
+                        record.literWaterPOC = -1
+                        record.kilogramWastePOC = -1
+                        record.carbonClass = ""
+                        record.waterClass = ""
+                        record.wasteClass = ""
+                        record.greenClass = ""
+                        delete record.chain_id
+                    }
                     delete record.hkey
                     data[hkey].push(record)
                 }
