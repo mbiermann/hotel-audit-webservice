@@ -1304,8 +1304,13 @@ const getCachedTouchlessStatusForHKeys = (hkeys) => {
         let proms = []
         for (let hkey of hkeys) {
             proms.push(new Promise((resolve, reject) => {
-                cache.get(`${hkey}:touchless`, (err, val) => {
-                    if (val !== null) data[hkey] = JSON.parse(val)
+                const key = `${hkey}:touchless`
+                cache.get(key, (err, val) => {
+                    if (!!err) {
+                        console.log(`Error received when fetching cache entry ${key}: ${err}`)
+                    } else if (val !== null) {
+                        try { data[hkey] = JSON.parse(val) } catch (e) { console.log(`Error received when parsing cache entry ${key}: ${val}`) }
+                    }
                     resolve()
                 })
             }))
@@ -1324,9 +1329,13 @@ const getCachedGeosureRecordsForHkeys = (hkeys) => {
     return new Promise((resolve) => {
         let data = {}
         let proms = hkeys.map((hkey) => new Promise((resolve, reject) => {
-            cache.get(`geosure:${hkey}`, (err, val) => {
-                if (!!err) return resolve()
-                if (val !== null) data[hkey] = JSON.parse(val)
+            const key = `geosure:${hkey}`
+            cache.get(key, (err, val) => {
+                if (!!err) {
+                    console.log(`Error received when fetching cache entry ${key}: ${err}`)
+                } else if (val !== null) {
+                    try { data[hkey] = JSON.parse(val) } catch (e) { console.log(`Error received when parsing cache entry ${key}: ${val}`) }
+                }
                 resolve()
             })
         }))
@@ -1648,8 +1657,13 @@ const getCachedCheckinConfigsForHkeys = (hkeys, checkin_date_ref) => {
     return new Promise((resolve) => {
         let data = {}
         let proms = hkeys.map((hkey) => new Promise((resolve, reject) => {
-            cache.get(`checkin:${formatDate(checkin_date_ref)}:${hkey}`, (err, val) => {
-                if (val !== null) data[hkey] = JSON.parse(val)
+            const key = `checkin:${formatDate(checkin_date_ref)}:${hkey}`
+            cache.get(key, (err, val) => {
+                if (!!err) {
+                    console.log(`Error received when fetching cache entry ${key}: ${err}`)
+                } else if (val !== null) {
+                    try { data[hkey] = JSON.parse(val) } catch (e) { console.log(`Error received when parsing cache entry ${key}: ${val}`) }
+                }
                 resolve()
             })
         }))
@@ -1702,9 +1716,15 @@ exports.getCheckinConfigsForHkeys = (hkeys, checkin_date_ref) => {
 exports.getCachedClientSettings = (clientID) => {
     //console.log("getCachedClientSettings", clientID)
     return new Promise((resolve) => {
-        return cache.get(`rate-limit-client:${clientID}`, (err, val) => {
+        const key = `rate-limit-client:${clientID}`
+        return cache.get(key, (err, val) => {
             //console.log(`rate-limit-client:${clientID}`, val)
-            if (val !== null) resolve(JSON.parse(val))
+            if (!!err) {
+                console.log(`Error received when fetching cache entry ${key}: ${err}`)
+                resolve(null)
+            } else if (val !== null) {
+                try { resolve(JSON.parse(val)) } catch (e) { console.log(`Error received when parsing cache entry ${key}: ${val}`) }
+            }
             resolve(null)
         })
     })   
