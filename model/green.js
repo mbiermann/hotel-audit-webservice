@@ -44,5 +44,6 @@ class GreenStayAuditRecord {
 }
 
 module.exports = {
-    GreenStayAuditRecord: GreenStayAuditRecord
+    GreenStayAuditRecord: GreenStayAuditRecord,
+    select: select
 }
