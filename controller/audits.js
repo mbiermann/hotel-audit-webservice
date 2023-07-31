@@ -11,7 +11,7 @@ const flatten = require('flat')
 const xlsx = require('node-xlsx')
 const CryptoJS = require('crypto-js')
 const fs = require('fs')
-const { select } = require('../model/green')
+const { selectPropertyFromObject } = require('../model/green')
 const testData = JSON.parse(fs.readFileSync('./gsi2-testing.json', 'utf8'))
 
 let projectId = process.env.GC_PROJECT_ID
@@ -283,8 +283,8 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                     const programs = await storage.getPrograms(hkey)
                     const cert = await storage.getLastCertificate(hkey)
                     const record = {};
-                    if (programs.length > 0) record.program = select(['name', 'link'], programs[0])
-                    if (cert && 'cert_id' in cert) record.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
+                    if (programs.length > 0) record.program = selectPropertyFromObject(['name', 'link'], programs[0])
+                    if (cert && 'cert_id' in cert) record.cert = selectPropertyFromObject(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
                     // Bypass green stay check because the hotel has no footprint records
                     if (record.program || record.cert) record.type = "green_stay_not_applicable"
                     data[hkey].push(record)
