@@ -285,6 +285,8 @@ router.get('/', combinedAuthMiddleware, async (req, resp) => {
                     const record = {};
                     if (programs.length > 0) record.program = select(['name', 'link'], programs[0])
                     if ('cert_id' in cert) record.cert = select(['cert_id', 'validity_start', 'validity_end', 'url', 'issuer'], cert)
+                    // Bypass green stay check because the hotel has no footprint records
+                    if (record.program || record.cert) record.type = "green_stay_not_applicable"
                     data[hkey].push(record)
                 }
             }
