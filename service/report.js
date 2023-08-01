@@ -92,7 +92,7 @@ module.exports = {
                     queue.add(() => {return new Promise(async (resolve, reject) => {
                         logger.logEvent(logger.ReportRunStatusUpdate, {page: i, incr: incr, stage: `start_fetch_${type}`})
                         let res2 = await db.select(table, '', cols, 'ORDER BY hkey asc', skip = i, limit = incr)
-                        let hkeys = res2.map(val => val.hkey)
+                        let hkeys = res2.filter(val => val.hkey).map(val => val.hkey)
                         let statuses = await storage.getHotelStatusByHkeys(hkeys, programs, true, true, false, true, ['code'])
                         for (let j = 0; j < statuses.length; j++) {
                             for (key of Object.keys(statuses[j])) if (headers.indexOf(key) === -1 && !!statuses[j][key]) headers.push(key)
