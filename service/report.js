@@ -42,7 +42,14 @@ module.exports = {
                         proms.push(new Promise((resolve, reject) => {
                             cache.get(`${reportKey}:${m}`, (err, val) => {
                                 if (!!val) {
-                                    let obj = JSON.parse(val)
+                                    cache.del(`${reportKey}:${m}`);
+                                    let obj;
+                                    try {
+                                        obj = JSON.parse(val)
+                                    } catch (error) {
+                                        console.warn('Could not parse json: ' + val);
+                                        resolve();
+                                    }
                                     let outLine = {}
                                     headers.forEach(col => {
                                         let val = obj[col]
