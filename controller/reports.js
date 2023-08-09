@@ -7,25 +7,40 @@ const { combinedAuthMiddleware: combinedAuthMiddleware } = require('../utils/aut
 const {createReport} = require('../service/report')
 
 if (process.env.MODE === 'REPORT') {
+    const generateReport = async (type, label) => {
+        const filePath = await createReport(type);
+        await storage.uploadFile(filePath);
+        trackEvent('Audit Web Service', label + ' Report Created')
+    };
+
     router.patch('/hs-report', async (_, resp) => {
-        resp.status(200).send()
-        let filePath = await createReport('clean')
-        await storage.uploadFile(filePath)
-        trackEvent('Audit Web Service', 'HS Report Created')
+        resp.status(200).send();
+        await generateReport('clean', 'HS');
     })
 
     router.patch('/gsi2-report', async (_, resp) => {
         resp.status(200).send()
-        let filePath = await createReport('gsi2')
-        await storage.uploadFile(filePath)
-        trackEvent('Audit Web Service', 'GSI2 Report Created')
+        await generateReport('gsi2', 'GSI2');
     })
 
     router.patch('/green-report', async (_, resp) => {
         resp.status(200).send()
-        let filePath = await createReport('green')
-        await storage.uploadFile(filePath)
-        trackEvent('Audit Web Service', 'GSI1 Report Created')
+        await generateReport('green', 'GSI1');
+    })
+
+    const safeGenerateReport = async (type, label) => {
+        try {
+            await generateReport(type, label);
+        } catch (err) {
+            console.warn('Fail to create report ' + label);
+        }
+    };
+
+    router.patch('/all-report', async (_, resp) => {
+        resp.status(200).send()
+        await safeGenerateReport('clean', 'HS');
+        await safeGenerateReport('gsi2', 'GSI2');
+        await safeGenerateReport('green', 'GSI1');
     })
 }
 
