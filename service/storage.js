@@ -1128,7 +1128,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                     ) D 
                     LEFT JOIN green_footprint_claims C ON C.hkey = D.hkey
                     LEFT JOIN hotels E ON D.hkey = E.hkey
-                    LEFT JOIN gsi2_compensation_terms F on E.hkey = F.hkey
+                    LEFT JOIN gsi2_compensation_terms F ON D.hkey = F.hkey
                     WHERE C.report_year = D.report_year`
                     
                     await db.query(query, async (error, greenClaims, fields) => {
@@ -1208,7 +1208,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                         }
 
                         if (leftHkeys.length > 0) {
-                            let q = `SELECT C.*, E.hkey as compensation FROM (
+                            let q = `SELECT C.*, E._id AS compensation FROM (
                                 SELECT DISTINCT(A.hkey), (
                                     SELECT MAX(B.report_year) FROM green_audits B WHERE B.hkey = A.hkey LIMIT 1
                                 ) AS report_year 
@@ -1216,7 +1216,7 @@ let getGreenAuditRecordsForHkeys = (hkeys, options) => {
                                 WHERE A.hkey IN (${leftHkeys})
                             ) D 
                             LEFT JOIN green_audits C ON C.hkey = D.hkey 
-                            LEFT JOIN gsi2_compensation_terms E ON C.hkey = E.hkey
+                            LEFT JOIN gsi2_compensation_terms E ON D.hkey = E.hkey
                             WHERE C.report_year = D.report_year`
                             
                             await db.query(q, async (error2, greenAudits, fields2) => {
