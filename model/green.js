@@ -33,6 +33,7 @@ class GreenStayAuditRecord {
         }
 
         this.chain_id = auditData.chain_id
+        this.compensation = !!auditData.compensation
 
         // GSI1
         if (auditData.program) this.program = select(['name', 'link'], auditData.program)
