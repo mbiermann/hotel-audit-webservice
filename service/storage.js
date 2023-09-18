@@ -210,6 +210,9 @@ let evalGreenClaimRecord = async (i, full_certs_and_programs = false) => {
     if (i.kgCo2ePOC > 300) {
         _addAnomaly(i, ANOMALIES.CARBON_EMISSION_TOO_HIGH, "Carbon emission per occupied room", i.kgCo2ePOC)
     }
+    if (i.kgCo2ePOC <= 1) {
+        _addAnomaly(i, ANOMALIES.CARBON_EMISSION_TOO_LOW, "Carbon emission per occupied room", i.kgCo2ePOC)
+    }
     i.carbonClass = await benchmarkCarbonEmission(i, i.location_id)
     
     if (!i.no_water_data_available) {
@@ -250,9 +253,11 @@ const ANOMALIES = {
     NET_WATER_CONSUMPTION_TOO_LOW: "NET_WATER_CONSUMPTION_TOO_LOW",
     NET_WATER_CONSUMPTION_TOO_HIGH: "NET_WATER_CONSUMPTION_TOO_HIGH",
     CARBON_EMISSION_TOO_HIGH: "CARBON_EMISSION_TOO_HIGH",
+    CARBON_EMISSION_TOO_LOW: "CARBON_EMISSION_TOO_LOW",
     LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH: "LAUNDRY_PER_OCCUPIED_ROOM_TOO_HIGH",
     OCCUPANCY_TOO_LOW: "OCCUPANCY_TOO_LOW",
-    TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH: "TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH"
+    TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH: "TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH",
+    TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_LOW: "TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_LOW"
 }
 
 const _addAnomaly = (item, anomalyType, metric, value) => {
@@ -403,6 +408,9 @@ let evalGreenAuditRecord = (i, full_certs_and_programs = false) => {
             if (i.kgCo2ePOC > 1000) {
                 _addAnomaly(i, ANOMALIES.TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_HIGH, `Total carbon per occupied room unusually high above 1 ton carbon equivalent`, i.kgCo2ePOC)
             }  
+            if (i.kgCo2ePOC <= 1) {
+                _addAnomaly(i, ANOMALIES.TOTAL_CARBON_PER_OCCUPIED_ROOM_TOO_LOW, `Total carbon per occupied room unusually low below 1 kg carbon equivalent`, i.kgCo2ePOC)
+            }
 
             i.greenClass = calculateGreenClass(i.carbonClass, i.waterClass, i.wasteClass)
 
